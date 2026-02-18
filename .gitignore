@@ -1,0 +1,7 @@
+# Ignore all data files (large/raw artifacts)
+data/**
+
+# Keep the folder structure and README files tracked
+!data/
+!data/**/
+!data/**/README.md
