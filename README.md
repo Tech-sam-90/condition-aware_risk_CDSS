@@ -57,12 +57,12 @@ Data source: **MIMIC-IV v3.1 (PhysioNet)**
 ## 🏗 System Architecture
 ```mermaid
 flowchart TD
-    A[Vital Signs (chartevents)] --> B[ICU Stay Linking (icustays)]
-    B --> C[Admission Context (admissions)]
-    C --> D[Diagnosis Mapping (diagnoses_icd)]
-    D --> E[Lab Context (labevents)]
-    E --> F[Treatment Context (inputevents)]
-    F --> G[Context-Aware Alert Engine]
+  A["Vital Signs: chartevents"] --> B["ICU Stay Linking: icustays"]
+  B --> C["Admission Context: admissions"]
+  C --> D["Diagnosis Mapping: diagnoses_icd"]
+  D --> E["Lab Context: labevents"]
+  E --> F["Treatment Context: inputevents"]
+  F --> G["Context-Aware Alert Engine"]
 ```
 
 ---
@@ -145,6 +145,14 @@ condition-aware_risk_CDSS/
 └── README.md
 ```
 
+### Quick Links
+- [data_processing/](data_processing/)
+- [feature_engineering/](feature_engineering/)
+- [modeling/](modeling/)
+- [evaluation/](evaluation/)
+- [notebooks/](notebooks/)
+- [README.md](README.md)
+
 ---
 
 ## 🔒 Data Access
@@ -168,5 +176,4 @@ Samuel Adeniji
 ## 📜 License
 
 This project is for research and educational purposes only.
-## 📜 License
 
