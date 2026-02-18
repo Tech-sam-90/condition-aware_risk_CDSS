@@ -55,21 +55,15 @@ Data source: **MIMIC-IV v3.1 (PhysioNet)**
 ---
 
 ## 🏗 System Architecture
-
-Vital Signs (chartevents)
-↓
-ICU Stay Linking (icustays)
-↓
-Admission Context (admissions)
-↓
-Diagnosis Mapping (diagnoses_icd)
-↓
-Lab Context (labevents)
-↓
-Treatment Context (inputevents)
-↓
-Context-Aware Alert Engine
-
+```mermaid
+flowchart TD
+    A[Vital Signs (chartevents)] --> B[ICU Stay Linking (icustays)]
+    B --> C[Admission Context (admissions)]
+    C --> D[Diagnosis Mapping (diagnoses_icd)]
+    D --> E[Lab Context (labevents)]
+    E --> F[Treatment Context (inputevents)]
+    F --> G[Context-Aware Alert Engine]
+```
 
 ---
 
@@ -95,17 +89,18 @@ Each time window includes:
 
 #### 🔹 Rule-Based Baseline
 Disease-conditioned thresholds:
+```text
 If Sepsis:
-Alert if HR > 120 and MAP < 65
+  Alert if HR > 120 and MAP < 65
 
 If COPD:
-Alert if SpO2 < 88
-
+  Alert if SpO₂ < 88
+```
 
 #### 🔹 Statistical Modeling
 Compute disease-specific baseline distributions:
 
-z = (x − μ_disease) / σ_disease
+$z = (x - \mu_{disease}) / \sigma_{disease}$
 
 Alerts trigger when deviation exceeds learned thresholds.
 
@@ -135,14 +130,20 @@ Alerts trigger when deviation exceeds learned thresholds.
 ---
 
 ## 📁 Project Structure
+```text
+condition-aware_risk_CDSS/
 ├── data_processing/
+│   └── README.md
 ├── feature_engineering/
+│   └── README.md
 ├── modeling/
+│   └── README.md
 ├── evaluation/
+│   └── README.md
 ├── notebooks/
-├── README.md
-
-
+│   └── README.md
+└── README.md
+```
 
 ---
 
@@ -167,4 +168,5 @@ Samuel Adeniji
 ## 📜 License
 
 This project is for research and educational purposes only.
+## 📜 License
 
