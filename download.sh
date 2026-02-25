@@ -11,7 +11,6 @@ PHYSIONET_USER="sadeniji"
 
 # Files to download
 FILES=(
-    "icu/chartevents.csv.gz"
     "icu/inputevents.csv.gz"
     "icu/outputevents.csv.gz"
     "icu/procedureevents.csv.gz"
