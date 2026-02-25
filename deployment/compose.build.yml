@@ -1,0 +1,12 @@
+services:
+  risk-api:
+    image: ${BACKEND_IMAGE:-local/condition-aware-risk-api:latest}
+    build:
+      context: ..
+      dockerfile: deployment/backend/Dockerfile
+
+  risk-web:
+    image: ${FRONTEND_IMAGE:-local/condition-aware-risk-web:latest}
+    build:
+      context: ..
+      dockerfile: deployment/frontend/Dockerfile

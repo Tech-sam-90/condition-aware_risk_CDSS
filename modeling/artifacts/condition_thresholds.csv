@@ -1,0 +1,5 @@
+condition_input,threshold_high_risk
+sepsis,0.192078
+heart_failure,0.062154
+ckd,0.0677
+diabetes,0.029174

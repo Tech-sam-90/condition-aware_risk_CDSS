@@ -1,0 +1,19 @@
+{
+  "feature_cols": [
+    "condition_input",
+    "heart_rate_mean",
+    "sbp_mean",
+    "map_mean",
+    "resp_rate_mean",
+    "spo2_mean",
+    "temp_f_mean",
+    "hr_minus_map_mean"
+  ],
+  "default_threshold_high_risk": 0.085997,
+  "thresholds_by_condition": {
+    "sepsis": 0.192078,
+    "heart_failure": 0.062154,
+    "ckd": 0.0677,
+    "diabetes": 0.029174
+  }
+}

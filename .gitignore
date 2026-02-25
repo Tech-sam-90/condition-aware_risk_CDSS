@@ -5,3 +5,8 @@ data/**
 !data/
 !data/**/
 !data/**/README.md
+
+# Python cache files
+__pycache__/
+*.pyc
+.ipynb_checkpoints/

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Condition-Aware Risk Predictor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Condition-Aware Risk Predictor</h1>
+      <p class="subtitle">Enter condition + first-24h vitals summary to estimate risk.</p>
+
+      <form id="risk-form" class="card">
+        <label>Condition
+          <select id="condition" required>
+            <option value="sepsis">Sepsis</option>
+            <option value="heart_failure">Heart Failure</option>
+            <option value="ckd">CKD</option>
+            <option value="diabetes">Diabetes</option>
+          </select>
+        </label>
+
+        <label>Heart rate (bpm)
+          <input id="heart_rate" type="number" step="0.1" required value="110" />
+        </label>
+
+        <label>SBP (mmHg)
+          <input id="sbp" type="number" step="0.1" required value="95" />
+        </label>
+
+        <label>MAP (mmHg)
+          <input id="map" type="number" step="0.1" required value="62" />
+        </label>
+
+        <label>Respiratory rate (/min)
+          <input id="resp_rate" type="number" step="0.1" required value="24" />
+        </label>
+
+        <label>SpO2 (%)
+          <input id="spo2" type="number" step="0.1" required value="93" />
+        </label>
+
+        <label>Temperature (°F)
+          <input id="temp_f" type="number" step="0.1" required value="100.4" />
+        </label>
+
+        <button type="submit">Predict risk</button>
+      </form>
+
+      <section id="result" class="card hidden"></section>
+      <p id="error" class="error"></p>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

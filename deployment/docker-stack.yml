@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  risk-api:
+    image: ${BACKEND_IMAGE:-your-registry/condition-aware-risk-api:latest}
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - risk-net
+
+  risk-web:
+    image: ${FRONTEND_IMAGE:-your-registry/condition-aware-risk-web:latest}
+    ports:
+      - target: 80
+        published: 8080
+        protocol: tcp
+        mode: ingress
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - risk-net
+
+networks:
+  risk-net:
+    driver: overlay

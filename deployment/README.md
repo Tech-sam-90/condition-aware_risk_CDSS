@@ -1,0 +1,61 @@
+# Deployment (Docker + Swarm)
+
+This folder contains deployment code for a local web application:
+
+- `risk-api` (FastAPI backend) for model inference
+- `risk-web` (Nginx static frontend) for user input + prediction display
+
+## 1) Ensure model artifacts exist
+
+From repository root:
+
+```bash
+/home/ubuntu/care_risk_env/bin/python modeling/train_calibrated_condition_models.py
+```
+
+This generates files used by backend image under `modeling/artifacts/`.
+
+## 2) Build local images
+
+```bash
+cd deployment
+cp .env.example .env
+docker compose --env-file .env -f compose.build.yml build
+```
+
+## 3) (Optional) Push to your registry
+
+```bash
+docker compose --env-file .env -f compose.build.yml push
+```
+
+## 4) Deploy with Docker Swarm
+
+Initialize swarm once (if not already):
+
+```bash
+docker swarm init
+```
+
+Deploy stack:
+
+```bash
+docker stack deploy --with-registry-auth --compose-file docker-stack.yml ${STACK_NAME}
+```
+
+Check services:
+
+```bash
+docker stack services ${STACK_NAME}
+```
+
+Access app:
+
+- UI: `http://localhost:8080`
+- API health: `http://localhost:8080/api/health`
+
+## 5) Remove stack
+
+```bash
+docker stack rm ${STACK_NAME}
+```
