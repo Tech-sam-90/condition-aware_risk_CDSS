@@ -5,6 +5,11 @@ This folder contains deployment code for a local web application:
 - `risk-api` (FastAPI backend) for model inference
 - `risk-web` (Nginx static frontend) for user input + prediction display
 
+Streaming support:
+
+- Frontend can run a simulated bedside stream mode.
+- Backend exposes WebSocket endpoint at `/api/ws/live` (proxied to FastAPI `/ws/live`).
+
 ## 1) Ensure model artifacts exist
 
 From repository root:

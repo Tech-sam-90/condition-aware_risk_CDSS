@@ -1,11 +1,12 @@
 import json
 import pickle
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 MODEL_DIR = Path("/app/model_artifacts")
@@ -57,30 +58,7 @@ def load_artifacts():
     return model, metadata
 
 
-app = FastAPI(title="Condition-Aware Risk API", version="1.0.0")
-
-try:
-    MODEL, METADATA = load_artifacts()
-except Exception as exc:
-    MODEL = None
-    METADATA = None
-    STARTUP_ERROR = str(exc)
-else:
-    STARTUP_ERROR = None
-
-
-@app.get("/health")
-def health():
-    if STARTUP_ERROR:
-        raise HTTPException(status_code=500, detail=STARTUP_ERROR)
-    return {"status": "ok"}
-
-
-@app.post("/predict", response_model=RiskResponse)
-def predict(payload: RiskRequest):
-    if STARTUP_ERROR:
-        raise HTTPException(status_code=500, detail=STARTUP_ERROR)
-
+def predict_risk(payload: RiskRequest) -> RiskResponse:
     row = {
         "condition_input": payload.condition,
         "heart_rate_mean": payload.heart_rate,
@@ -106,3 +84,65 @@ def predict(payload: RiskRequest):
         high_risk_threshold=round(high_thr, 4),
         risk_band=risk_band(prob, high_thr),
     )
+
+
+app = FastAPI(title="Condition-Aware Risk API", version="1.0.0")
+
+try:
+    MODEL, METADATA = load_artifacts()
+except Exception as exc:
+    MODEL = None
+    METADATA = None
+    STARTUP_ERROR = str(exc)
+else:
+    STARTUP_ERROR = None
+
+
+@app.get("/health")
+def health():
+    if STARTUP_ERROR:
+        raise HTTPException(status_code=500, detail=STARTUP_ERROR)
+    return {"status": "ok"}
+
+
+@app.post("/predict", response_model=RiskResponse)
+def predict(payload: RiskRequest):
+    if STARTUP_ERROR:
+        raise HTTPException(status_code=500, detail=STARTUP_ERROR)
+    return predict_risk(payload)
+
+
+@app.websocket("/ws/live")
+async def ws_live(websocket: WebSocket):
+    await websocket.accept()
+
+    if STARTUP_ERROR:
+        await websocket.send_json({"type": "error", "detail": STARTUP_ERROR})
+        await websocket.close(code=1011)
+        return
+
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            try:
+                payload = RiskRequest.model_validate(raw)
+            except ValidationError as exc:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "detail": "Invalid payload",
+                        "errors": exc.errors(),
+                    }
+                )
+                continue
+
+            prediction = predict_risk(payload)
+            await websocket.send_json(
+                {
+                    "type": "prediction",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    **prediction.model_dump(),
+                }
+            )
+    except WebSocketDisconnect:
+        return

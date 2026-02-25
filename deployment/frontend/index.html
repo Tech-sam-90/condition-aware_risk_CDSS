@@ -9,7 +9,17 @@
   <body>
     <main class="container">
       <h1>Condition-Aware Risk Predictor</h1>
-      <p class="subtitle">Enter condition + first-24h vitals summary to estimate risk.</p>
+      <p class="subtitle">Live prediction updates automatically as vitals/condition values change.</p>
+      <p id="live-status" class="live-status status-idle">Live mode active</p>
+
+      <section class="card stream-card">
+        <h2>Streaming mode</h2>
+        <p class="stream-note">Simulates bedside monitor updates and pushes them to backend via WebSocket.</p>
+        <div class="stream-controls">
+          <button id="stream-toggle" type="button">Start stream</button>
+          <span id="stream-state" class="stream-state">stopped</span>
+        </div>
+      </section>
 
       <form id="risk-form" class="card">
         <label>Condition
@@ -45,7 +55,7 @@
           <input id="temp_f" type="number" step="0.1" required value="100.4" />
         </label>
 
-        <button type="submit">Predict risk</button>
+        <button type="submit">Refresh now</button>
       </form>
 
       <section id="result" class="card hidden"></section>

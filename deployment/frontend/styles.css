@@ -24,12 +24,55 @@ h1 {
   color: #475467;
 }
 
+.live-status {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.status-idle {
+  color: #027a48;
+}
+
+.status-running {
+  color: #1d4ed8;
+}
+
+.status-error {
+  color: #b42318;
+}
+
 .card {
   background: #ffffff;
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 4px 18px rgba(16, 24, 40, 0.08);
   margin-bottom: 16px;
+}
+
+.stream-card h2 {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+
+.stream-note {
+  margin-top: 0;
+  color: #475467;
+  font-size: 14px;
+}
+
+.stream-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stream-state {
+  font-size: 14px;
+  font-weight: 600;
+  color: #344054;
+  text-transform: uppercase;
 }
 
 form {
