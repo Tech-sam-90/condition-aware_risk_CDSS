@@ -15,10 +15,11 @@ Streaming support:
 From repository root:
 
 ```bash
-/home/ubuntu/care_risk_env/bin/python modeling/train_calibrated_condition_models.py
+/home/ubuntu/care_risk_env/bin/python feature_engineering/build_rolling_window_timeseries.py
+/home/ubuntu/care_risk_env/bin/python modeling/train_rolling_boosted_models.py
 ```
 
-This generates files used by backend image under `modeling/artifacts/`.
+This generates the rolling boosted files used by backend image under `modeling/artifacts/rolling_boosted/`.
 
 ## 2) Build local images
 

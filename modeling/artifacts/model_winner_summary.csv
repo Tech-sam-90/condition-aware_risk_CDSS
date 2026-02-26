@@ -1,0 +1,4 @@
+lead_hours,best_by_roc_auc,best_roc_auc,best_by_auprc,best_auprc
+1,boosted,0.8898358627009002,boosted,0.0341999626667926
+2,boosted,0.7741478267734673,boosted,0.0117192369464621
+3,boosted,0.7590054347317436,boosted,0.0103056735243164

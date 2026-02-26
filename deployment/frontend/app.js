@@ -50,9 +50,11 @@ function hasInvalidValue(payload) {
 function updateResult(data, timestamp = null) {
   const color = riskColor(data.risk_band);
   const stamp = timestamp ? new Date(timestamp) : new Date();
+  const lead = data.lead_hours ? `${data.lead_hours}h` : "1h";
   result.innerHTML = `
     <h2>Prediction</h2>
     <p><strong>Condition:</strong> ${data.condition}</p>
+    <p><strong>Prediction horizon:</strong> ${lead}</p>
     <p><strong>Risk probability:</strong> ${(data.risk_probability * 100).toFixed(2)}%</p>
     <p><strong>High-risk threshold:</strong> ${(data.high_risk_threshold * 100).toFixed(2)}%</p>
     <p><strong>Risk band:</strong> <span style="color:${color}; font-weight: 700; text-transform: uppercase;">${data.risk_band}</span></p>

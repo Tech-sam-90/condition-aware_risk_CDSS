@@ -11,10 +11,7 @@ PHYSIONET_USER="sadeniji"
 
 # Files to download
 FILES=(
-    "icu/inputevents.csv.gz"
-    "icu/outputevents.csv.gz"
-    "icu/procedureevents.csv.gz"
-    "icu/d_items.csv.gz"
+    "hosp/d_icd_diagnoses.csv.gz"
 )
 
 # Loop over files and download each

@@ -1,4 +1,5 @@
 import json
+import os
 import pickle
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,13 +10,14 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
-MODEL_DIR = Path("/app/model_artifacts")
+MODEL_DIR = Path(os.getenv("MODEL_DIR", "/app/model_artifacts"))
 
 
 class RiskRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     condition: Literal["sepsis", "heart_failure", "ckd", "diabetes"]
+    lead_hours: Literal[1, 2, 3] = 1
     heart_rate: float = Field(..., ge=10, le=260)
     sbp: float = Field(..., ge=30, le=300)
     map_value: float = Field(..., alias="map", ge=20, le=220)
@@ -26,6 +28,7 @@ class RiskRequest(BaseModel):
 
 class RiskResponse(BaseModel):
     condition: str
+    lead_hours: int
     risk_probability: float
     high_risk_threshold: float
     risk_band: Literal["low", "moderate", "high"]
@@ -40,46 +43,98 @@ def risk_band(prob: float, high_threshold: float) -> str:
 
 
 def load_artifacts():
-    model_path = MODEL_DIR / "calibrated_boosted_model.pkl"
-    metadata_path = MODEL_DIR / "metadata.json"
+    rolling_dir = MODEL_DIR / "rolling_boosted"
+    metadata_path = rolling_dir / "metadata.json"
+    if not metadata_path.exists():
+        raise FileNotFoundError(f"Missing metadata file: {metadata_path}")
 
-    if not model_path.exists() or not metadata_path.exists():
-        missing = []
-        if not model_path.exists():
-            missing.append(str(model_path))
-        if not metadata_path.exists():
-            missing.append(str(metadata_path))
-        raise FileNotFoundError(f"Missing model artifacts: {', '.join(missing)}")
-
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
     with open(metadata_path, "r", encoding="utf-8") as f:
         metadata = json.load(f)
-    return model, metadata
+
+    models = {}
+    missing = []
+    for lead in [1, 2, 3]:
+        path = rolling_dir / f"calibrated_boosted_lead_{lead}h.pkl"
+        if not path.exists():
+            missing.append(str(path))
+            continue
+        with open(path, "rb") as f:
+            models[lead] = pickle.load(f)
+
+    if missing:
+        raise FileNotFoundError(f"Missing model artifacts: {', '.join(missing)}")
+
+    return models, metadata
+
+
+def condition_code(condition: str) -> int:
+    default_map = {"ckd": 0, "diabetes": 1, "heart_failure": 2, "other": 3, "sepsis": 4}
+    metadata_map = METADATA.get("condition_code_mapping", {}) if METADATA else {}
+    if metadata_map:
+        return int(metadata_map.get(condition, metadata_map.get("other", 3)))
+    return default_map.get(condition, 3)
+
+
+def feature_row(payload: RiskRequest):
+    hr = payload.heart_rate
+    sbp = payload.sbp
+    map_value = payload.map_value
+    rr = payload.resp_rate
+    spo2 = payload.spo2
+    temp_f = payload.temp_f
+
+    row = {
+        "condition_code": condition_code(payload.condition),
+        "heart_rate": hr,
+        "sbp": sbp,
+        "map": map_value,
+        "resp_rate": rr,
+        "spo2": spo2,
+        "temp_f": temp_f,
+        "hr_minus_map": hr - map_value,
+        "heart_rate_mean_1h": hr,
+        "heart_rate_mean_3h": hr,
+        "heart_rate_mean_5h": hr,
+        "heart_rate_slope_5h": 0.0,
+        "sbp_mean_1h": sbp,
+        "sbp_mean_3h": sbp,
+        "sbp_mean_5h": sbp,
+        "sbp_slope_5h": 0.0,
+        "map_mean_1h": map_value,
+        "map_mean_3h": map_value,
+        "map_mean_5h": map_value,
+        "map_slope_5h": 0.0,
+        "resp_rate_mean_1h": rr,
+        "resp_rate_mean_3h": rr,
+        "resp_rate_mean_5h": rr,
+        "resp_rate_slope_5h": 0.0,
+        "spo2_mean_1h": spo2,
+        "spo2_mean_3h": spo2,
+        "spo2_mean_5h": spo2,
+        "spo2_slope_5h": 0.0,
+        "temp_f_mean_1h": temp_f,
+        "temp_f_mean_3h": temp_f,
+        "temp_f_mean_5h": temp_f,
+        "temp_f_slope_5h": 0.0,
+    }
+    return row
 
 
 def predict_risk(payload: RiskRequest) -> RiskResponse:
-    row = {
-        "condition_input": payload.condition,
-        "heart_rate_mean": payload.heart_rate,
-        "sbp_mean": payload.sbp,
-        "map_mean": payload.map_value,
-        "resp_rate_mean": payload.resp_rate,
-        "spo2_mean": payload.spo2,
-        "temp_f_mean": payload.temp_f,
-        "hr_minus_map_mean": payload.heart_rate - payload.map_value,
-    }
-    x = pd.DataFrame([row])
-    prob = float(MODEL.predict_proba(x)[:, 1][0])
+    feature_cols = METADATA.get("feature_columns", [])
+    row = feature_row(payload)
+    x = pd.DataFrame([{col: row.get(col, 0.0) for col in feature_cols}])
 
-    high_thr = float(
-        METADATA["thresholds_by_condition"].get(
-            payload.condition, METADATA["default_threshold_high_risk"]
-        )
-    )
+    model = MODELS.get(payload.lead_hours)
+    if model is None:
+        raise HTTPException(status_code=500, detail=f"Model for lead={payload.lead_hours}h not loaded")
+
+    prob = float(model.predict_proba(x)[:, 1][0])
+    high_thr = float(os.getenv("HIGH_RISK_THRESHOLD", "0.02"))
 
     return RiskResponse(
         condition=payload.condition,
+        lead_hours=payload.lead_hours,
         risk_probability=round(prob, 4),
         high_risk_threshold=round(high_thr, 4),
         risk_band=risk_band(prob, high_thr),
@@ -89,9 +144,9 @@ def predict_risk(payload: RiskRequest) -> RiskResponse:
 app = FastAPI(title="Condition-Aware Risk API", version="1.0.0")
 
 try:
-    MODEL, METADATA = load_artifacts()
+    MODELS, METADATA = load_artifacts()
 except Exception as exc:
-    MODEL = None
+    MODELS = None
     METADATA = None
     STARTUP_ERROR = str(exc)
 else:
