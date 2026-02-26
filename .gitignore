@@ -6,6 +6,13 @@ data/**
 !data/**/
 !data/**/README.md
 
+# Keep processed folder structure tracked, but exclude processed CSV payloads
+!data/processed/
+!data/processed/**/
+!data/processed/**/README.md
+data/processed/**/*.csv
+data/processed/**/*.csv.gz
+
 # Python cache files
 __pycache__/
 *.pyc
