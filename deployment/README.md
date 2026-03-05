@@ -60,6 +60,18 @@ Access app:
 - UI: `http://localhost:8080`
 - API health: `http://localhost:8080/api/health`
 
+## 4.1) Plot deployed model metrics
+
+From repository root:
+
+```bash
+python deployment/plot_deployed_model_metrics.py
+```
+
+Output:
+
+- `deployment/artifacts/deployed_model_metrics.png`
+
 ## 5) Remove stack
 
 ```bash
