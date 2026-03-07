@@ -9,7 +9,7 @@ COPY deployment/backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY deployment/backend/app /app/app
-COPY modeling/artifacts /app/model_artifacts
+COPY modeling/artifacts/rolling_boosted /app/model_artifacts/rolling_boosted
 
 EXPOSE 8000
 

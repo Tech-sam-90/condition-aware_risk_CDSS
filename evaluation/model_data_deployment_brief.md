@@ -2,6 +2,8 @@
 
 This document summarizes the current project status for presentation.
 
+Last refreshed: **2026-03-07** after retraining with minority-target balancing experiments.
+
 ## Data & Preprocessing
 
 ### Dataset source (real, publicly available)
@@ -35,7 +37,7 @@ This document summarizes the current project status for presentation.
 - For earlier mortality model family:
   - `hospital_expire_flag`
 
-### Initial EDA insights
+### EDA and imbalance insights
 
 #### Class imbalance
 - On full rolling table (`2,042,802` rows):
@@ -48,6 +50,20 @@ This document summarizes the current project status for presentation.
   - `target_event_in_2h`: **7,639 positives** (0.429%)
   - `target_event_in_3h`: **7,116 positives** (0.400%)
   - `hospital_expire_flag`: **275,284 positives** (15.46%)
+
+#### Latest rebalancing settings (15% minority target)
+- New training controls were added for all model families to combine majority downsampling and minority oversampling.
+- Rolling boosted training (`train_rolling_boosted_models.py`) now records before/after class counts in metrics output:
+  - Lead 1h: before **6,522 / 1,419,059** (pos/neg), after **13,044 / 73,916**, train minority rate **0.1500**
+  - Lead 2h: before **6,111 / 1,418,487**, after **12,222 / 69,258**, train minority rate **0.1500**
+  - Lead 3h: before **5,693 / 1,418,811**, after **11,386 / 64,521**, train minority rate **0.1500**
+- Rolling GRU sequence training (`train_rolling_sequence_models.py`) uses positive repeat + negative keep probability per lead:
+  - Lead 1h: positive repeat **2**, negative keep prob **0.0297**, achieved minority rate **~0.1500**
+  - Lead 2h: positive repeat **2**, negative keep prob **0.0279**, achieved minority rate **0.1500**
+  - Lead 3h: positive repeat **2**, negative keep prob **0.0261**, achieved minority rate **0.1500**
+- Tabular and LSTM mortality tasks were already near the target prevalence, so class counts remained effectively unchanged:
+  - Tabular train split: **6,841 / 37,275** (minority rate **0.1551**)
+  - LSTM train split: **6,842 / 37,274** (minority rate **0.1551**)
 
 #### Missing values
 - Very low missingness after feature engineering and fill operations.
@@ -77,6 +93,7 @@ This document summarizes the current project status for presentation.
 - Logistic model (`train_calibrated_condition_models.py`):
   - Numeric: median imputation + standard scaling
   - Categorical (`condition_input`): most-frequent imputation + one-hot encoding
+  - `class_weight="balanced"` is disabled automatically when explicit resampling is enabled
 - Boosted model (same script):
   - Numeric: median imputation
   - Categorical: one-hot encoding
@@ -84,6 +101,7 @@ This document summarizes the current project status for presentation.
 - Rolling boosted (`train_rolling_boosted_models.py`):
   - Median imputation in pipeline
   - Condition encoded as integer `condition_code`
+  - Resampling controlled by env vars (`ROLLING_RESAMPLE_ENABLED`, `ROLLING_TARGET_MINORITY_RATIO`, `ROLLING_OVERSAMPLE_MULTIPLIER`)
 
 #### Train-test split
 - Mortality tabular model (`train_calibrated_condition_models.py`):
@@ -106,22 +124,29 @@ Why this is currently the best production candidate:
 - **Latency:** lightweight CPU inference for tabular input; no sequence-state handling at serving time.
 - **Compute cost:** low compared with recurrent DL models.
 - **Storage:** compact artifacts.
-  - `calibrated_boosted_lead_1h.pkl`: 780,642 bytes
-  - `calibrated_boosted_lead_2h.pkl`: 703,283 bytes
-  - `calibrated_boosted_lead_3h.pkl`: 535,339 bytes
+  - `calibrated_boosted_lead_1h.pkl`: 766,998 bytes
+  - `calibrated_boosted_lead_2h.pkl`: 756,062 bytes
+  - `calibrated_boosted_lead_3h.pkl`: 745,710 bytes
 - **Scalability:** stateless FastAPI service, easy horizontal scaling.
 - **Ethical risk control:** simpler model behavior and easier threshold governance than opaque deep sequence models.
 
 ### Performance snapshot
 
 #### Main tabular comparison (mortality family)
-- Calibrated HGB: ROC-AUC 0.7793, AUPRC 0.4547, Brier 0.1081
-- LSTM (24h vitals): ROC-AUC 0.7622, AUPRC 0.4483, Brier 0.1117
-- Logistic Regression: ROC-AUC 0.7136, AUPRC 0.3272, Brier 0.2135
+- HistGradientBoosting: ROC-AUC **0.7799**, AUPRC **0.4590**, Brier **0.1079**
+- Calibrated HGB: ROC-AUC **0.7781**, AUPRC **0.4513**, Brier **0.1084**
+- LSTM (24h vitals): ROC-AUC **0.7736**, AUPRC **0.4606**, Brier **0.1086**
+- Logistic Regression: ROC-AUC **0.7137**, AUPRC **0.3270**, Brier **0.1198**
 
 #### Rolling lead-time comparison (event prediction)
-- Boosted (lead 1h/2h/3h ROC-AUC): 0.8898 / 0.7741 / 0.7590
-- GRU (lead 1h/2h/3h ROC-AUC): 0.6382 / 0.6148 / 0.6173
+- Boosted (lead 1h/2h/3h):
+  - ROC-AUC: **0.8892 / 0.7753 / 0.7616**
+  - AUPRC: **0.0326 / 0.0117 / 0.0112**
+  - Brier: **0.0386 / 0.0345 / 0.0339**
+- GRU (lead 1h/2h/3h):
+  - ROC-AUC: **0.7282 / 0.7049 / 0.7036**
+  - AUPRC: **0.0061 / 0.0051 / 0.0051**
+  - Brier: **0.0241 / 0.0350 / 0.0168**
 
 ### Deployment target
 
@@ -156,8 +181,9 @@ flowchart TD
 
 ### Technical risks
 - Severe class imbalance for lead-time targets (<0.5% positives) can destabilize rare-event performance.
+- Rebalancing can improve representation but can also shift calibration, requiring post-training threshold and calibration checks.
 - Potential overfitting to surrogate event definition (`zero_hour` logic).
-- Sequence models currently underperforming; need architecture and objective tuning.
+- Sequence models improved after rebalancing but still underperform boosted models on lead-time discrimination.
 - Outlier-prone vitals distributions require robust handling and possibly winsorization/physiology constraints.
 
 ### Deployment risks
@@ -177,7 +203,7 @@ flowchart TD
 2. **External-style validation protocol**
    - Temporal split and subgroup fairness reporting.
 3. **Production model hardening**
-   - Keep HGB as primary; run GRU in shadow mode for ongoing comparison.
+    - Keep boosted model as primary; run GRU in shadow mode for ongoing comparison.
 4. **Monitoring layer**
    - Add drift, calibration, and alert-rate dashboards.
 5. **Clinical threshold calibration**

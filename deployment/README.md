@@ -21,6 +21,11 @@ From repository root:
 
 This generates the rolling boosted files used by backend image under `modeling/artifacts/rolling_boosted/`.
 
+Note:
+
+- Backend image copies only `modeling/artifacts/rolling_boosted` into `/app/model_artifacts/rolling_boosted`.
+- Rebuild `risk-api` after retraining so deployment uses the newest model files.
+
 ## 2) Build local images
 
 ```bash
