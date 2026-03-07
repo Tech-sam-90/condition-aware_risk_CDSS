@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 import numpy as np
 import pandas as pd
@@ -9,6 +10,12 @@ from sklearn.model_selection import train_test_split
 PROCESSED_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/data/processed")
 OUTPUT_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+VITALS = ["heart_rate", "sbp", "map", "resp_rate", "spo2", "temp_f"]
+CONDITIONS = ["sepsis", "heart_failure", "ckd", "diabetes", "other"]
+HORIZON_HOURS = 24
+EPOCHS = int(os.getenv("LSTM_EPOCHS", "12"))
+BATCH_SIZE = int(os.getenv("LSTM_BATCH_SIZE", "128"))
 
 
 def _load_tensorflow():
@@ -21,46 +28,69 @@ def _load_tensorflow():
     return tf
 
 
-def build_sequences(long_df, horizon_hours=24):
-    vitals = ["heart_rate", "sbp", "map", "resp_rate", "spo2", "temp_f"]
-    all_hours = pd.DataFrame({"hour_since_icu_admit": np.arange(horizon_hours)})
+def condition_one_hot(condition: str) -> np.ndarray:
+    idx = {name: i for i, name in enumerate(CONDITIONS)}
+    arr = np.zeros((len(CONDITIONS),), dtype=np.float32)
+    arr[idx.get(str(condition).lower(), idx["other"])] = 1.0
+    return arr
 
+
+def build_sequences(rolling_df: pd.DataFrame, horizon_hours: int = HORIZON_HOURS):
+    all_hours = pd.DataFrame({"hour_from_icu": np.arange(horizon_hours)})
+
+    global_medians = rolling_df[VITALS].median().to_dict()
     sequences = []
     stay_ids = []
+    labels = []
 
-    for stay_id, grp in long_df.groupby("stay_id"):
-        g = grp[["hour_since_icu_admit", *vitals]].copy()
-        g = all_hours.merge(g, on="hour_since_icu_admit", how="left")
-        g[vitals] = g[vitals].ffill().bfill()
-        g[vitals] = g[vitals].fillna(g[vitals].median())
-        sequences.append(g[vitals].values.astype("float32"))
-        stay_ids.append(stay_id)
+    for stay_id, grp in rolling_df.groupby("stay_id"):
+        g = grp[["hour_from_icu", "condition_input", "hospital_expire_flag", *VITALS]].copy()
+        g = all_hours.merge(g, on="hour_from_icu", how="left")
+
+        condition_val = (
+            grp["condition_input"].dropna().astype(str).str.lower().iloc[0]
+            if grp["condition_input"].notna().any()
+            else "other"
+        )
+        y_val = int(pd.to_numeric(grp["hospital_expire_flag"], errors="coerce").fillna(0).max())
+
+        g[VITALS] = g[VITALS].ffill().bfill()
+        for col in VITALS:
+            g[col] = g[col].fillna(float(global_medians.get(col, 0.0)))
+
+        cond_vec = condition_one_hot(condition_val)
+        cond_mat = np.tile(cond_vec, (len(g), 1))
+        x_num = g[VITALS].to_numpy(dtype=np.float32)
+        x = np.concatenate([x_num, cond_mat], axis=1)
+
+        sequences.append(x)
+        stay_ids.append(int(stay_id))
+        labels.append(y_val)
 
     X_seq = np.stack(sequences, axis=0)
-    return stay_ids, X_seq
-
-
-def build_labels(stay_ids, model_table):
-    y_map = model_table.set_index("stay_id")["hospital_expire_flag"].astype(int).to_dict()
-    y = np.array([y_map.get(s, 0) for s in stay_ids], dtype="int32")
-    return y
+    y = np.array(labels, dtype="int32")
+    return stay_ids, X_seq, y
 
 
 def main():
-    long_path = PROCESSED_DIR / "vitals_24h_long.csv"
-    table_path = PROCESSED_DIR / "condition_model_table_v2_with_24h_vitals.csv"
-    if not long_path.exists() or not table_path.exists():
+    rolling_path = PROCESSED_DIR / "rolling_window_multicondition_timeseries.csv"
+    if not rolling_path.exists():
         raise FileNotFoundError(
-            "Missing processed files. Run feature_engineering/build_24h_vitals_features.py first."
+            "Missing rolling file. Run feature_engineering/build_rolling_window_timeseries.py first."
         )
 
     tf = _load_tensorflow()
 
-    long_df = pd.read_csv(long_path)
-    model_table = pd.read_csv(table_path)
+    rolling_df = pd.read_csv(rolling_path)
+    rolling_df["stay_id"] = pd.to_numeric(rolling_df["stay_id"], errors="coerce")
+    rolling_df["hour_from_icu"] = pd.to_numeric(rolling_df["hour_from_icu"], errors="coerce")
+    for col in VITALS:
+        rolling_df[col] = pd.to_numeric(rolling_df[col], errors="coerce")
 
-    stay_ids, X_seq = build_sequences(long_df)
-    y = build_labels(stay_ids, model_table)
+    rolling_df = rolling_df[(rolling_df["hour_from_icu"] >= 0) & (rolling_df["hour_from_icu"] < HORIZON_HOURS)]
+    rolling_df = rolling_df.dropna(subset=["stay_id", "hour_from_icu", "condition_input"]) 
+
+    stay_ids, X_seq, y = build_sequences(rolling_df)
 
     X_train, X_test, y_train, y_test = train_test_split(
         X_seq, y, test_size=0.2, random_state=42, stratify=y
@@ -93,8 +123,8 @@ def main():
         X_train,
         y_train,
         validation_split=0.2,
-        epochs=30,
-        batch_size=128,
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
         callbacks=callbacks,
         verbose=1,
     )

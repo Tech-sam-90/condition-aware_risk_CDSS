@@ -40,6 +40,11 @@ def plot_metric_comparison() -> None:
         axes[idx].grid(alpha=0.25, axis="y")
         axes[idx].legend(title="Model")
 
+        for container in axes[idx].containers:
+            vals = [p.get_height() for p in container]
+            labels = [f"{v:.4f}" if pd.notna(v) else "" for v in vals]
+            axes[idx].bar_label(container, labels=labels, padding=2, fontsize=8)
+
     fig.suptitle("Rolling-Window Model Comparison by Lead Time", y=1.03)
     fig.tight_layout()
     out_path = ART_DIR / "rolling_model_metrics_comparison.png"

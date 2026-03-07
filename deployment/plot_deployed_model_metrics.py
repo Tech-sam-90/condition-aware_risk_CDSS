@@ -30,23 +30,33 @@ def main() -> None:
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.6))
     fig.suptitle(f"Deployed Model Evaluation Metrics ({model_family})", fontsize=12)
 
-    axes[0].plot(leads, metrics["roc_auc"], marker="o")
+    roc_vals = metrics["roc_auc"].tolist()
+    auprc_vals = metrics["auprc"].tolist()
+    brier_vals = metrics["brier"].tolist()
+
+    axes[0].plot(leads, roc_vals, marker="o")
     axes[0].set_title("ROC-AUC")
     axes[0].set_xlabel("Lead Hours")
     axes[0].set_ylabel("Score")
     axes[0].grid(alpha=0.25)
+    for x, y in zip(leads, roc_vals):
+        axes[0].annotate(f"{y:.4f}", (x, y), textcoords="offset points", xytext=(0, 7), ha="center", fontsize=9)
 
-    axes[1].plot(leads, metrics["auprc"], marker="o", color="tab:orange")
+    axes[1].plot(leads, auprc_vals, marker="o", color="tab:orange")
     axes[1].set_title("AUPRC")
     axes[1].set_xlabel("Lead Hours")
     axes[1].set_ylabel("Score")
     axes[1].grid(alpha=0.25)
+    for x, y in zip(leads, auprc_vals):
+        axes[1].annotate(f"{y:.4f}", (x, y), textcoords="offset points", xytext=(0, 7), ha="center", fontsize=9)
 
-    axes[2].plot(leads, metrics["brier"], marker="o", color="tab:green")
+    axes[2].plot(leads, brier_vals, marker="o", color="tab:green")
     axes[2].set_title("Brier Score")
     axes[2].set_xlabel("Lead Hours")
     axes[2].set_ylabel("Score")
     axes[2].grid(alpha=0.25)
+    for x, y in zip(leads, brier_vals):
+        axes[2].annotate(f"{y:.4f}", (x, y), textcoords="offset points", xytext=(0, 7), ha="center", fontsize=9)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
