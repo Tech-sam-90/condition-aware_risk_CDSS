@@ -69,10 +69,17 @@ def plot_vitals_timeseries_by_condition() -> None:
     fig, axes = plt.subplots(2, 3, figsize=(17, 8), sharex=True)
     axes = axes.flatten()
 
+    label_map = {
+        "sepsis": "Sepsis",
+        "heart_failure": "Heart Failure",
+        "ckd": "CKD",
+        "diabetes": "Diabetes",
+    }
+
     for ax, vital in zip(axes, VITALS):
         for condition in CONDITION_ORDER:
             subset = agg[agg["condition_input"] == condition]
-            ax.plot(subset["hour_from_icu"], subset[vital], label=condition)
+            ax.plot(subset["hour_from_icu"], subset[vital], label=label_map.get(condition, condition))
 
         ax.set_title(vital)
         ax.set_xlabel("Hour from ICU admission")
@@ -80,9 +87,18 @@ def plot_vitals_timeseries_by_condition() -> None:
         ax.grid(alpha=0.25)
 
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=4, frameon=False)
-    fig.suptitle("Vital Time Series (Median by Hour) Across Conditions", y=1.02)
-    fig.tight_layout()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.04),
+        ncol=2,
+        frameon=False,
+        columnspacing=2.0,
+        handlelength=2.6,
+    )
+    fig.suptitle("Vital Time Series (Median by Hour) Across Conditions", y=1.08)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     out_path = ART_DIR / "vitals_timeseries_6_vitals_4_conditions.png"
     fig.savefig(out_path, dpi=170, bbox_inches="tight")
     plt.close(fig)
