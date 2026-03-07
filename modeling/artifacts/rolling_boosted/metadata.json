@@ -38,5 +38,10 @@
     1,
     2,
     3
-  ]
+  ],
+  "resampling": {
+    "enabled": true,
+    "target_minority_ratio": 0.15,
+    "oversample_multiplier": 2.0
+  }
 }

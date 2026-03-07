@@ -9,11 +9,20 @@
     "temp_f_mean",
     "hr_minus_map_mean"
   ],
-  "default_threshold_high_risk": 0.085997,
+  "default_threshold_high_risk": 0.091688,
   "thresholds_by_condition": {
-    "sepsis": 0.192078,
-    "heart_failure": 0.062154,
-    "ckd": 0.0677,
-    "diabetes": 0.029174
+    "sepsis": 0.193688,
+    "heart_failure": 0.060359,
+    "ckd": 0.065894,
+    "diabetes": 0.02899
+  },
+  "resampling": {
+    "enabled": true,
+    "target_minority_ratio": 0.15,
+    "oversample_multiplier": 2.0,
+    "n_pos_before": 6841,
+    "n_neg_before": 37275,
+    "n_pos_after": 6841,
+    "n_neg_after": 37275
   }
 }

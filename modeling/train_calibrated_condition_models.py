@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 import pickle
 
 import numpy as np
@@ -14,10 +15,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+try:
+    from resampling_utils import rebalance_binary_dataframe
+except ImportError:
+    from modeling.resampling_utils import rebalance_binary_dataframe
+
 
 PROCESSED_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/data/processed")
 MODEL_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+RESAMPLE_ENABLED = os.getenv("TABULAR_RESAMPLE_ENABLED", "1") == "1"
+TARGET_MINORITY_RATIO = float(os.getenv("TABULAR_TARGET_MINORITY_RATIO", "0.15"))
+OVERSAMPLE_MULTIPLIER = float(os.getenv("TABULAR_OVERSAMPLE_MULTIPLIER", "2.0"))
 
 
 def pick_primary_condition(row):
@@ -135,6 +145,37 @@ def main():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
+    train_df = X_train.copy()
+    train_df[target_col] = y_train.values
+    resample_plan = {
+        "n_pos_original": int(y_train.sum()),
+        "n_neg_original": int(len(y_train) - y_train.sum()),
+        "n_pos_sample": int(y_train.sum()),
+        "n_neg_sample": int(len(y_train) - y_train.sum()),
+        "target_minority_ratio": float(TARGET_MINORITY_RATIO),
+        "achieved_minority_ratio": float(y_train.mean()) if len(y_train) else 0.0,
+        "oversample_multiplier": float(OVERSAMPLE_MULTIPLIER),
+        "pos_replace": False,
+        "neg_replace": False,
+    }
+    if RESAMPLE_ENABLED:
+        train_df, resample_plan = rebalance_binary_dataframe(
+            train_df,
+            target_col=target_col,
+            target_minority_ratio=TARGET_MINORITY_RATIO,
+            oversample_multiplier=OVERSAMPLE_MULTIPLIER,
+            random_state=42,
+        )
+    print(
+        "Tabular resampling:",
+        f"before pos={resample_plan['n_pos_original']} neg={resample_plan['n_neg_original']}",
+        f"after pos={resample_plan['n_pos_sample']} neg={resample_plan['n_neg_sample']}",
+        f"minority_rate={resample_plan['achieved_minority_ratio']:.4f}",
+    )
+
+    X_train = train_df[feature_cols].copy()
+    y_train = train_df[target_col].astype(int)
+
     num_cols = [
         "heart_rate_mean",
         "sbp_mean",
@@ -147,11 +188,12 @@ def main():
     cat_cols = ["condition_input"]
 
     log_pre, boost_pre = build_preprocessors(num_cols, cat_cols)
+    logistic_class_weight = None if RESAMPLE_ENABLED else "balanced"
 
     logistic = Pipeline(
         steps=[
             ("preprocess", log_pre),
-            ("clf", LogisticRegression(max_iter=2000, class_weight="balanced")),
+            ("clf", LogisticRegression(max_iter=2000, class_weight=logistic_class_weight)),
         ]
     )
     boosted = Pipeline(
@@ -220,6 +262,15 @@ def main():
         "thresholds_by_condition": {
             row["condition_input"]: float(row["threshold_high_risk"])
             for _, row in thresholds.iterrows()
+        },
+        "resampling": {
+            "enabled": RESAMPLE_ENABLED,
+            "target_minority_ratio": TARGET_MINORITY_RATIO,
+            "oversample_multiplier": OVERSAMPLE_MULTIPLIER,
+            "n_pos_before": int(resample_plan["n_pos_original"]),
+            "n_neg_before": int(resample_plan["n_neg_original"]),
+            "n_pos_after": int(resample_plan["n_pos_sample"]),
+            "n_neg_after": int(resample_plan["n_neg_sample"]),
         },
     }
 

@@ -14,7 +14,10 @@ ART_DIR.mkdir(parents=True, exist_ok=True)
 VITAL_COLS = ["heart_rate", "sbp", "map", "resp_rate", "spo2", "temp_f"]
 CONDITIONS = ["sepsis", "heart_failure", "ckd", "diabetes", "other"]
 SEQ_LEN = 24
-NEGATIVE_KEEP_PROB = float(os.getenv("SEQUENCE_NEGATIVE_KEEP_PROB", "0.2"))
+DEFAULT_NEGATIVE_KEEP_PROB = float(os.getenv("SEQUENCE_NEGATIVE_KEEP_PROB", "0.2"))
+RESAMPLE_ENABLED = os.getenv("SEQUENCE_RESAMPLE_ENABLED", "1") == "1"
+TARGET_MINORITY_RATIO = float(os.getenv("SEQUENCE_TARGET_MINORITY_RATIO", "0.15"))
+POSITIVE_OVERSAMPLE_MULTIPLIER = float(os.getenv("SEQUENCE_POSITIVE_OVERSAMPLE_MULTIPLIER", "2.0"))
 EPOCHS = int(os.getenv("SEQUENCE_EPOCHS", "8"))
 BATCH_SIZE = int(os.getenv("SEQUENCE_BATCH_SIZE", "256"))
 
@@ -43,6 +46,7 @@ def iter_sequences(
     target_col: str,
     seq_len: int,
     neg_keep_prob: float,
+    positive_repeat: int,
     seed: int,
 ):
     rng = np.random.default_rng(seed)
@@ -64,10 +68,19 @@ def iter_sequences(
             x_num = x_num_all[start : end_idx + 1]
             x_cond = cond_ohe[start : end_idx + 1]
             x = np.concatenate([x_num, x_cond], axis=1).astype(np.float32)
-            yield x, np.float32(y)
+            repeat_count = positive_repeat if y == 1 else 1
+            for _ in range(repeat_count):
+                yield x, np.float32(y)
 
 
-def count_sequences(df: pd.DataFrame, stay_ids: list, target_col: str, seq_len: int, neg_keep_prob: float) -> int:
+def count_sequences(
+    df: pd.DataFrame,
+    stay_ids: list,
+    target_col: str,
+    seq_len: int,
+    neg_keep_prob: float,
+    positive_repeat: int,
+) -> int:
     total = 0
     for stay_id in stay_ids:
         group = df[df["stay_id"] == stay_id]
@@ -77,8 +90,48 @@ def count_sequences(df: pd.DataFrame, stay_ids: list, target_col: str, seq_len: 
         positives = int(group[target_col].fillna(0).astype(int).iloc[seq_len - 1 :].sum())
         windows = n - seq_len + 1
         negatives = windows - positives
-        total += positives + int(negatives * neg_keep_prob)
+        total += int(positives * positive_repeat) + int(negatives * neg_keep_prob)
     return max(total, 1)
+
+
+def window_class_counts(df: pd.DataFrame, stay_ids: list, target_col: str, seq_len: int):
+    positives = 0
+    negatives = 0
+    for stay_id in stay_ids:
+        group = df[df["stay_id"] == stay_id].sort_values("hour_from_icu")
+        if len(group) < seq_len:
+            continue
+        y_vals = group[target_col].fillna(0).astype(int).to_numpy()
+        y_windows = y_vals[seq_len - 1 :]
+        pos = int(y_windows.sum())
+        total = int(len(y_windows))
+        positives += pos
+        negatives += max(total - pos, 0)
+    return positives, negatives
+
+
+def derive_sampling_params(pos_count: int, neg_count: int):
+    if pos_count <= 0 or neg_count <= 0:
+        return 1, float(DEFAULT_NEGATIVE_KEEP_PROB), 0.0
+
+    if not RESAMPLE_ENABLED:
+        neg_after = int(np.round(neg_count * DEFAULT_NEGATIVE_KEEP_PROB))
+        achieved_ratio = float(pos_count / max(pos_count + neg_after, 1))
+        return 1, float(DEFAULT_NEGATIVE_KEEP_PROB), achieved_ratio
+
+    positive_repeat = max(1, int(np.ceil(POSITIVE_OVERSAMPLE_MULTIPLIER)))
+    pos_after = int(pos_count * positive_repeat)
+
+    desired_neg_after = int(
+        np.round(pos_after * (1.0 - TARGET_MINORITY_RATIO) / max(TARGET_MINORITY_RATIO, 1e-8))
+    )
+    desired_neg_after = max(desired_neg_after, 1)
+
+    neg_keep_prob = min(1.0, desired_neg_after / float(neg_count))
+    neg_after = int(np.round(neg_count * neg_keep_prob))
+    achieved_ratio = float(pos_after / max(pos_after + neg_after, 1))
+
+    return positive_repeat, float(neg_keep_prob), achieved_ratio
 
 
 def build_eval_arrays(df: pd.DataFrame, stay_ids: list, target_col: str, seq_len: int):
@@ -144,7 +197,24 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
     val_ids = val_only["stay_id"].astype(int).tolist()
 
     input_dim = len(VITAL_COLS) + len(CONDITIONS)
-    train_count = count_sequences(df, train_ids, target_col, SEQ_LEN, NEGATIVE_KEEP_PROB)
+    train_pos_windows, train_neg_windows = window_class_counts(df, train_ids, target_col, SEQ_LEN)
+    positive_repeat, neg_keep_prob, achieved_ratio = derive_sampling_params(
+        train_pos_windows, train_neg_windows
+    )
+    print(
+        f"lead={lead_hours}h sequence sampling: "
+        f"before pos={train_pos_windows} neg={train_neg_windows} | "
+        f"positive_repeat={positive_repeat} neg_keep_prob={neg_keep_prob:.4f} | "
+        f"minority_rate={achieved_ratio:.4f} | enabled={RESAMPLE_ENABLED}"
+    )
+    train_count = count_sequences(
+        df,
+        train_ids,
+        target_col,
+        SEQ_LEN,
+        neg_keep_prob,
+        positive_repeat=positive_repeat,
+    )
 
     train_ds = tf.data.Dataset.from_generator(
         lambda: iter_sequences(
@@ -152,7 +222,8 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
             train_ids,
             target_col=target_col,
             seq_len=SEQ_LEN,
-            neg_keep_prob=NEGATIVE_KEEP_PROB,
+            neg_keep_prob=neg_keep_prob,
+            positive_repeat=positive_repeat,
             seed=42 + lead_hours,
         ),
         output_signature=(
@@ -162,7 +233,14 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
     )
     train_ds = train_ds.shuffle(4096).repeat().batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
-    val_count = count_sequences(df, val_ids, target_col, SEQ_LEN, 1.0)
+    val_count = count_sequences(
+        df,
+        val_ids,
+        target_col,
+        SEQ_LEN,
+        1.0,
+        positive_repeat=1,
+    )
     val_ds = tf.data.Dataset.from_generator(
         lambda: iter_sequences(
             df,
@@ -170,6 +248,7 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
             target_col=target_col,
             seq_len=SEQ_LEN,
             neg_keep_prob=1.0,
+            positive_repeat=1,
             seed=1042 + lead_hours,
         ),
         output_signature=(
@@ -225,6 +304,11 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
         "n_train_rows": int(train_count),
         "n_test_rows": int(len(X_test)),
         "n_test_pos": int(y_test.sum()),
+        "train_pos_windows_before": int(train_pos_windows),
+        "train_neg_windows_before": int(train_neg_windows),
+        "train_positive_repeat": int(positive_repeat),
+        "train_neg_keep_prob": float(neg_keep_prob),
+        "train_minority_rate_after_sampling": float(achieved_ratio),
     }
 
     pred_df = pd.DataFrame(

@@ -6,6 +6,11 @@ import pandas as pd
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 from sklearn.model_selection import train_test_split
 
+try:
+    from resampling_utils import rebalance_binary_arrays
+except ImportError:
+    from modeling.resampling_utils import rebalance_binary_arrays
+
 
 PROCESSED_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/data/processed")
 OUTPUT_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts")
@@ -16,6 +21,9 @@ CONDITIONS = ["sepsis", "heart_failure", "ckd", "diabetes", "other"]
 HORIZON_HOURS = 24
 EPOCHS = int(os.getenv("LSTM_EPOCHS", "12"))
 BATCH_SIZE = int(os.getenv("LSTM_BATCH_SIZE", "128"))
+RESAMPLE_ENABLED = os.getenv("LSTM_RESAMPLE_ENABLED", "1") == "1"
+TARGET_MINORITY_RATIO = float(os.getenv("LSTM_TARGET_MINORITY_RATIO", "0.15"))
+OVERSAMPLE_MULTIPLIER = float(os.getenv("LSTM_OVERSAMPLE_MULTIPLIER", "2.0"))
 
 
 def _load_tensorflow():
@@ -96,6 +104,21 @@ def main():
         X_seq, y, test_size=0.2, random_state=42, stratify=y
     )
 
+    if RESAMPLE_ENABLED:
+        X_train, y_train, resample_plan = rebalance_binary_arrays(
+            X_train,
+            y_train,
+            target_minority_ratio=TARGET_MINORITY_RATIO,
+            oversample_multiplier=OVERSAMPLE_MULTIPLIER,
+            random_state=42,
+        )
+        print(
+            "LSTM resampling:",
+            f"before pos={resample_plan['n_pos_original']} neg={resample_plan['n_neg_original']}",
+            f"after pos={resample_plan['n_pos_sample']} neg={resample_plan['n_neg_sample']}",
+            f"minority_rate={resample_plan['achieved_minority_ratio']:.4f}",
+        )
+
     model = tf.keras.Sequential(
         [
             tf.keras.layers.Input(shape=(X_seq.shape[1], X_seq.shape[2])),
@@ -136,6 +159,7 @@ def main():
         "roc_auc": float(roc_auc_score(y_test, p)),
         "auprc": float(average_precision_score(y_test, p)),
         "brier": float(brier_score_loss(y_test, p)),
+        "train_minority_rate": float(np.mean(y_train)) if len(y_train) else 0.0,
     }
 
     pd.DataFrame([metrics]).to_csv(OUTPUT_DIR / "lstm_model_metrics.csv", index=False)

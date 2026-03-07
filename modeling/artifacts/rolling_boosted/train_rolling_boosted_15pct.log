@@ -1,0 +1,10 @@
+lead=1h resampling: before pos=6522 neg=1419059 | after pos=13044 neg=73916 | minority_rate=0.1500
+lead=2h resampling: before pos=6111 neg=1418487 | after pos=12222 neg=69258 | minority_rate=0.1500
+lead=3h resampling: before pos=5693 neg=1418811 | after pos=11386 neg=64521 | minority_rate=0.1500
+   lead_hours   roc_auc  ...  train_pos_after  train_neg_after
+0           1  0.889243  ...            13044            73916
+1           2  0.775282  ...            12222            69258
+2           3  0.761631  ...            11386            64521
+
+[3 rows x 12 columns]
+Saved rolling boosted artifacts to: /home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts/rolling_boosted

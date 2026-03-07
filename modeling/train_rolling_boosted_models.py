@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 import pickle
 
 import pandas as pd
@@ -10,10 +11,19 @@ from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_s
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 
+try:
+    from resampling_utils import rebalance_binary_dataframe
+except ImportError:
+    from modeling.resampling_utils import rebalance_binary_dataframe
+
 
 PROCESSED_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/data/processed")
 ART_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts/rolling_boosted")
 ART_DIR.mkdir(parents=True, exist_ok=True)
+
+RESAMPLE_ENABLED = os.getenv("ROLLING_RESAMPLE_ENABLED", "1") == "1"
+TARGET_MINORITY_RATIO = float(os.getenv("ROLLING_TARGET_MINORITY_RATIO", "0.15"))
+OVERSAMPLE_MULTIPLIER = float(os.getenv("ROLLING_OVERSAMPLE_MULTIPLIER", "2.0"))
 
 
 def make_preprocessor(num_cols):
@@ -77,6 +87,32 @@ def main():
         train_df = work[work["stay_id"].isin(train_ids)].copy()
         test_df = work[work["stay_id"].isin(test_ids)].copy()
 
+        resample_plan = {
+            "n_pos_original": int(train_df[target_col].sum()),
+            "n_neg_original": int(len(train_df) - train_df[target_col].sum()),
+            "n_pos_sample": int(train_df[target_col].sum()),
+            "n_neg_sample": int(len(train_df) - train_df[target_col].sum()),
+            "target_minority_ratio": float(TARGET_MINORITY_RATIO),
+            "achieved_minority_ratio": float(train_df[target_col].mean()) if len(train_df) else 0.0,
+            "oversample_multiplier": float(OVERSAMPLE_MULTIPLIER),
+            "pos_replace": False,
+            "neg_replace": False,
+        }
+        if RESAMPLE_ENABLED:
+            train_df, resample_plan = rebalance_binary_dataframe(
+                train_df,
+                target_col=target_col,
+                target_minority_ratio=TARGET_MINORITY_RATIO,
+                oversample_multiplier=OVERSAMPLE_MULTIPLIER,
+                random_state=42 + lead,
+            )
+        print(
+            f"lead={lead}h resampling: "
+            f"before pos={resample_plan['n_pos_original']} neg={resample_plan['n_neg_original']} | "
+            f"after pos={resample_plan['n_pos_sample']} neg={resample_plan['n_neg_sample']} | "
+            f"minority_rate={resample_plan['achieved_minority_ratio']:.4f}"
+        )
+
         X_train = train_df[feat_cols]
         y_train = train_df[target_col]
         X_test = test_df[feat_cols]
@@ -117,6 +153,11 @@ def main():
                 "n_train_rows": len(train_df),
                 "n_test_rows": len(test_df),
                 "n_test_pos": int(y_test.sum()),
+                "train_minority_rate": float(y_train.mean()) if len(y_train) else 0.0,
+                "train_pos_before": int(resample_plan["n_pos_original"]),
+                "train_neg_before": int(resample_plan["n_neg_original"]),
+                "train_pos_after": int(resample_plan["n_pos_sample"]),
+                "train_neg_after": int(resample_plan["n_neg_sample"]),
             }
         )
 
@@ -134,6 +175,11 @@ def main():
         "model_family": "calibrated_hist_gradient_boosting",
         "feature_columns": feat_cols,
         "lead_hours": [1, 2, 3],
+        "resampling": {
+            "enabled": RESAMPLE_ENABLED,
+            "target_minority_ratio": TARGET_MINORITY_RATIO,
+            "oversample_multiplier": OVERSAMPLE_MULTIPLIER,
+        },
     }
     with open(ART_DIR / "metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)

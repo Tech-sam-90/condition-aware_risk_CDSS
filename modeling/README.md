@@ -34,6 +34,36 @@ python modeling/train_rolling_boosted_models.py
 python modeling/train_rolling_sequence_models.py
 ```
 
+## Class Rebalancing (15% Minority)
+
+All training scripts now support combined majority downsampling and minority oversampling.
+
+```bash
+# Tabular logistic/boosted/calibrated model
+TABULAR_RESAMPLE_ENABLED=1 \
+TABULAR_TARGET_MINORITY_RATIO=0.15 \
+TABULAR_OVERSAMPLE_MULTIPLIER=2.0 \
+python modeling/train_calibrated_condition_models.py
+
+# Rolling boosted lead models
+ROLLING_RESAMPLE_ENABLED=1 \
+ROLLING_TARGET_MINORITY_RATIO=0.15 \
+ROLLING_OVERSAMPLE_MULTIPLIER=2.0 \
+python modeling/train_rolling_boosted_models.py
+
+# LSTM baseline
+LSTM_RESAMPLE_ENABLED=1 \
+LSTM_TARGET_MINORITY_RATIO=0.15 \
+LSTM_OVERSAMPLE_MULTIPLIER=2.0 \
+python modeling/train_lstm_timeseries.py
+
+# GRU rolling sequence baseline
+SEQUENCE_RESAMPLE_ENABLED=1 \
+SEQUENCE_TARGET_MINORITY_RATIO=0.15 \
+SEQUENCE_POSITIVE_OVERSAMPLE_MULTIPLIER=2.0 \
+python modeling/train_rolling_sequence_models.py
+```
+
 ## Outputs
 
 Saved under `modeling/artifacts/`:
