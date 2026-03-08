@@ -45,6 +45,25 @@ Last refreshed: **2026-03-08**
   - `models/deployed/rolling_lstm_event/lstm_event_lead_3h.keras`
   - `models/deployed/rolling_lstm_event/metrics_by_lead.csv`
 
+### Why this model was selected (time-series effect)
+
+The final deployment uses `rolling_lstm_event` primarily because deterioration risk in ICU is a
+time-dependent process, not only a single-point vital-sign state.
+
+- Temporal trajectory modeling: LSTM is built to learn ordered changes across time (trend,
+  acceleration, and persistence), which is important for 1h-3h lead prediction.
+- Sequence-first objective: this milestone prioritizes a model family that is natively compatible
+  with hourly sequence monitoring and future live-stream window ingestion.
+- Empirical support within sequence family: LSTM-event outperforms GRU at all leads in ROC-AUC
+  in the current artifacts.
+- Deployment fit: three lead-specific `.keras` artifacts map directly to the API contract
+  (`lead_hours` = 1, 2, 3) and keep serving logic simple.
+
+Important tradeoff for presentation transparency:
+- The boosted baseline is still stronger on discrimination metrics in the current benchmark set.
+- LSTM-event is selected here to emphasize temporal modeling capability and sequence-aware
+  deployment direction, while boosted remains a shadow benchmark for governance checks.
+
 ### Deployed LSTM-event metrics by lead
 
 Source: `models/deployed/rolling_lstm_event/metrics_by_lead.csv`
