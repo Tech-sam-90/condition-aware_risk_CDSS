@@ -16,14 +16,14 @@ From repository root:
 
 ```bash
 /home/ubuntu/care_risk_env/bin/python feature_engineering/build_rolling_window_timeseries.py
-/home/ubuntu/care_risk_env/bin/python modeling/train_rolling_boosted_models.py
+/home/ubuntu/care_risk_env/bin/python modeling/train_rolling_lstm_event_models.py
 ```
 
-This generates the rolling boosted files used by backend image under `modeling/artifacts/rolling_boosted/`.
+This generates the LSTM sequence files used by backend image under `modeling/artifacts/rolling_lstm_event/`.
 
 Note:
 
-- Backend image copies only `modeling/artifacts/rolling_boosted` into `/app/model_artifacts/rolling_boosted`.
+- Backend image copies only `modeling/artifacts/rolling_lstm_event` into `/app/model_artifacts/rolling_lstm_event`.
 - Rebuild `risk-api` after retraining so deployment uses the newest model files.
 
 ## 2) Build local images

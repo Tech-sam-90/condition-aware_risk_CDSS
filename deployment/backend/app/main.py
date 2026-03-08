@@ -1,16 +1,17 @@
-import json
 import os
-import pickle
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-import pandas as pd
+import numpy as np
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", "/app/model_artifacts"))
+SEQ_LEN = int(os.getenv("SEQUENCE_LENGTH", "24"))
+CONDITIONS = ["sepsis", "heart_failure", "ckd", "diabetes", "other"]
+VITAL_COLS = ["heart_rate", "sbp", "map", "resp_rate", "spo2", "temp_f"]
 
 
 class RiskRequest(BaseModel):
@@ -43,93 +44,68 @@ def risk_band(prob: float, high_threshold: float) -> str:
 
 
 def load_artifacts():
-    rolling_dir = MODEL_DIR / "rolling_boosted"
-    metadata_path = rolling_dir / "metadata.json"
-    if not metadata_path.exists():
-        raise FileNotFoundError(f"Missing metadata file: {metadata_path}")
+    try:
+        import tensorflow as tf
+    except ImportError as exc:
+        raise ImportError("TensorFlow is required to serve LSTM artifacts.") from exc
 
-    with open(metadata_path, "r", encoding="utf-8") as f:
-        metadata = json.load(f)
+    rolling_dir = MODEL_DIR / "rolling_lstm_event"
 
     models = {}
     missing = []
     for lead in [1, 2, 3]:
-        path = rolling_dir / f"calibrated_boosted_lead_{lead}h.pkl"
+        path = rolling_dir / f"lstm_event_lead_{lead}h.keras"
         if not path.exists():
             missing.append(str(path))
             continue
-        with open(path, "rb") as f:
-            models[lead] = pickle.load(f)
+        models[lead] = tf.keras.models.load_model(path, compile=False)
 
     if missing:
         raise FileNotFoundError(f"Missing model artifacts: {', '.join(missing)}")
 
+    metadata = {
+        "model_family": "lstm_event_timeseries",
+        "sequence_length": SEQ_LEN,
+        "vitals": VITAL_COLS,
+        "conditions": CONDITIONS,
+        "source_dir": str(rolling_dir),
+    }
     return models, metadata
 
 
-def condition_code(condition: str) -> int:
-    default_map = {"ckd": 0, "diabetes": 1, "heart_failure": 2, "other": 3, "sepsis": 4}
-    metadata_map = METADATA.get("condition_code_mapping", {}) if METADATA else {}
-    if metadata_map:
-        return int(metadata_map.get(condition, metadata_map.get("other", 3)))
-    return default_map.get(condition, 3)
+def condition_one_hot(condition: str) -> np.ndarray:
+    idx = {name: i for i, name in enumerate(CONDITIONS)}
+    out = np.zeros((len(CONDITIONS),), dtype=np.float32)
+    out[idx.get(str(condition).lower(), idx["other"])] = 1.0
+    return out
 
 
-def feature_row(payload: RiskRequest):
-    hr = payload.heart_rate
-    sbp = payload.sbp
-    map_value = payload.map_value
-    rr = payload.resp_rate
-    spo2 = payload.spo2
-    temp_f = payload.temp_f
-
-    row = {
-        "condition_code": condition_code(payload.condition),
-        "heart_rate": hr,
-        "sbp": sbp,
-        "map": map_value,
-        "resp_rate": rr,
-        "spo2": spo2,
-        "temp_f": temp_f,
-        "hr_minus_map": hr - map_value,
-        "heart_rate_mean_1h": hr,
-        "heart_rate_mean_3h": hr,
-        "heart_rate_mean_5h": hr,
-        "heart_rate_slope_5h": 0.0,
-        "sbp_mean_1h": sbp,
-        "sbp_mean_3h": sbp,
-        "sbp_mean_5h": sbp,
-        "sbp_slope_5h": 0.0,
-        "map_mean_1h": map_value,
-        "map_mean_3h": map_value,
-        "map_mean_5h": map_value,
-        "map_slope_5h": 0.0,
-        "resp_rate_mean_1h": rr,
-        "resp_rate_mean_3h": rr,
-        "resp_rate_mean_5h": rr,
-        "resp_rate_slope_5h": 0.0,
-        "spo2_mean_1h": spo2,
-        "spo2_mean_3h": spo2,
-        "spo2_mean_5h": spo2,
-        "spo2_slope_5h": 0.0,
-        "temp_f_mean_1h": temp_f,
-        "temp_f_mean_3h": temp_f,
-        "temp_f_mean_5h": temp_f,
-        "temp_f_slope_5h": 0.0,
-    }
-    return row
+def feature_sequence(payload: RiskRequest) -> np.ndarray:
+    vitals_vec = np.array(
+        [
+            payload.heart_rate,
+            payload.sbp,
+            payload.map_value,
+            payload.resp_rate,
+            payload.spo2,
+            payload.temp_f,
+        ],
+        dtype=np.float32,
+    )
+    cond_vec = condition_one_hot(payload.condition)
+    step_vec = np.concatenate([vitals_vec, cond_vec], axis=0)
+    seq = np.tile(step_vec, (SEQ_LEN, 1)).astype(np.float32)
+    return np.expand_dims(seq, axis=0)
 
 
 def predict_risk(payload: RiskRequest) -> RiskResponse:
-    feature_cols = METADATA.get("feature_columns", [])
-    row = feature_row(payload)
-    x = pd.DataFrame([{col: row.get(col, 0.0) for col in feature_cols}])
+    x = feature_sequence(payload)
 
     model = MODELS.get(payload.lead_hours)
     if model is None:
         raise HTTPException(status_code=500, detail=f"Model for lead={payload.lead_hours}h not loaded")
 
-    prob = float(model.predict_proba(x)[:, 1][0])
+    prob = float(model.predict(x, verbose=0).reshape(-1)[0])
     high_thr = float(os.getenv("HIGH_RISK_THRESHOLD", "0.02"))
 
     return RiskResponse(

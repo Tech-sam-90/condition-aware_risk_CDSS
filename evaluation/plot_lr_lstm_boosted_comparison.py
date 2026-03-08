@@ -9,44 +9,44 @@ MODEL_ART_DIR = ROOT / "modeling" / "artifacts"
 OUT_DIR = ROOT / "evaluation" / "artifacts"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-BASELINE_METRICS_PATH = MODEL_ART_DIR / "model_metrics.csv"
-LSTM_METRICS_PATH = MODEL_ART_DIR / "lstm_model_metrics.csv"
+BOOSTED_METRICS_PATH = MODEL_ART_DIR / "rolling_boosted" / "metrics_by_lead.csv"
+GRU_METRICS_PATH = MODEL_ART_DIR / "rolling_sequence" / "metrics_by_lead.csv"
+LSTM_EVENT_METRICS_PATH = MODEL_ART_DIR / "rolling_lstm_event" / "metrics_by_lead.csv"
 OUT_PATH = OUT_DIR / "lr_lstm_boosted_performance_comparison.png"
 
 
 def load_metrics() -> pd.DataFrame:
-    if not BASELINE_METRICS_PATH.exists():
-        raise FileNotFoundError(f"Missing baseline metrics file: {BASELINE_METRICS_PATH}")
-    if not LSTM_METRICS_PATH.exists():
-        raise FileNotFoundError(
-            f"Missing LSTM metrics file: {LSTM_METRICS_PATH}. Run modeling/train_lstm_timeseries.py first."
-        )
+    for path in [BOOSTED_METRICS_PATH, GRU_METRICS_PATH, LSTM_EVENT_METRICS_PATH]:
+        if not path.exists():
+            raise FileNotFoundError(f"Missing metrics file: {path}")
 
-    baseline = pd.read_csv(BASELINE_METRICS_PATH)
-    lstm = pd.read_csv(LSTM_METRICS_PATH)
+    def macro_from_lead_metrics(path: Path, model_label: str) -> dict:
+        df = pd.read_csv(path)
+        needed = ["roc_auc", "auprc", "brier"]
+        missing = [c for c in needed if c not in df.columns]
+        if missing:
+            raise ValueError(f"Missing columns {missing} in {path}")
 
-    wanted = {
-        "logistic_regression": "Logistic Regression",
-        "calibrated_hist_gradient_boosting": "Boosted (Calibrated HGB)",
-        "lstm_24h_vitals": "LSTM (24h Vitals)",
-    }
+        return {
+            "model_label": model_label,
+            "roc_auc": float(df["roc_auc"].mean()),
+            "auprc": float(df["auprc"].mean()),
+            "brier": float(df["brier"].mean()),
+        }
 
-    baseline = baseline[baseline["model"].isin(["logistic_regression", "calibrated_hist_gradient_boosting"])]
-    combined = pd.concat([baseline, lstm], ignore_index=True)
-
-    missing = [m for m in wanted if m not in combined["model"].values]
-    if missing:
-        raise ValueError(f"Missing metrics for models: {missing}")
-
-    combined["model_label"] = combined["model"].map(wanted)
+    rows = [
+        macro_from_lead_metrics(BOOSTED_METRICS_PATH, "Boosted (Calibrated HGB)"),
+        macro_from_lead_metrics(GRU_METRICS_PATH, "GRU (Rolling Sequence)"),
+        macro_from_lead_metrics(LSTM_EVENT_METRICS_PATH, "LSTM-event (Rolling Sequence)"),
+    ]
+    combined = pd.DataFrame(rows)
     order = [
-        "Logistic Regression",
-        "LSTM (24h Vitals)",
         "Boosted (Calibrated HGB)",
+        "GRU (Rolling Sequence)",
+        "LSTM-event (Rolling Sequence)",
     ]
     combined["model_label"] = pd.Categorical(combined["model_label"], categories=order, ordered=True)
-    combined = combined.sort_values("model_label")
-    return combined
+    return combined.sort_values("model_label")
 
 
 def make_plot(metrics: pd.DataFrame) -> None:
@@ -56,7 +56,7 @@ def make_plot(metrics: pd.DataFrame) -> None:
     brier = metrics["brier"].tolist()
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    fig.suptitle("Model Performance Comparison: Logistic vs LSTM vs Boosted", fontsize=13)
+    fig.suptitle("Rolling Lead-Event Model Family Comparison (Macro Across 1h/2h/3h)", fontsize=12)
 
     bars0 = axes[0].bar(model_labels, roc_auc, color=["#5DA5DA", "#60BD68", "#F17CB0"])
     axes[0].set_title("ROC-AUC")

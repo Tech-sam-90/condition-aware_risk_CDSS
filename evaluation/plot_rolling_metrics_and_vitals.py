@@ -8,6 +8,9 @@ ROOT = Path("/home/ubuntu/condition-aware_risk_CDSS")
 ART_DIR = ROOT / "evaluation" / "artifacts"
 ART_DIR.mkdir(parents=True, exist_ok=True)
 
+BOOSTED_METRICS_PATH = ROOT / "modeling" / "artifacts" / "rolling_boosted" / "metrics_by_lead.csv"
+GRU_METRICS_PATH = ROOT / "modeling" / "artifacts" / "rolling_sequence" / "metrics_by_lead.csv"
+LSTM_EVENT_METRICS_PATH = ROOT / "modeling" / "artifacts" / "rolling_lstm_event" / "metrics_by_lead.csv"
 COMPARISON_PATH = ROOT / "modeling" / "artifacts" / "model_comparison_by_lead.csv"
 ROLLING_TS_PATH = ROOT / "data" / "processed" / "rolling_window_multicondition_timeseries.csv"
 
@@ -19,19 +22,54 @@ METRIC_TITLES = {
     "auprc": "AUPRC",
     "brier": "Brier Score",
 }
+MODEL_ORDER = [
+    "boosted_calibrated_hgb",
+    "sequence_gru",
+    "sequence_lstm_event",
+]
+MODEL_LABELS = {
+    "boosted_calibrated_hgb": "Boosted (Calibrated HGB)",
+    "sequence_gru": "GRU (Rolling Sequence)",
+    "sequence_lstm_event": "LSTM-event (Rolling Sequence)",
+}
+
+
+def build_comparison_table() -> pd.DataFrame:
+    for p in [BOOSTED_METRICS_PATH, GRU_METRICS_PATH, LSTM_EVENT_METRICS_PATH]:
+        if not p.exists():
+            raise FileNotFoundError(f"Missing file: {p}")
+
+    def select_metrics(path: Path, model_name: str) -> pd.DataFrame:
+        cols = ["lead_hours", "roc_auc", "auprc", "brier"]
+        df = pd.read_csv(path)
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            raise ValueError(f"Missing columns {missing} in {path}")
+        out = df[cols].copy()
+        out["model"] = model_name
+        return out
+
+    boosted = select_metrics(BOOSTED_METRICS_PATH, "boosted_calibrated_hgb")
+    gru = select_metrics(GRU_METRICS_PATH, "sequence_gru")
+    lstm_event = select_metrics(LSTM_EVENT_METRICS_PATH, "sequence_lstm_event")
+
+    comparison = pd.concat([boosted, gru, lstm_event], ignore_index=True)
+    comparison = comparison.sort_values(["lead_hours", "model"]).reset_index(drop=True)
+    comparison.to_csv(COMPARISON_PATH, index=False)
+    return comparison
 
 
 def plot_metric_comparison() -> None:
-    if not COMPARISON_PATH.exists():
-        raise FileNotFoundError(f"Missing file: {COMPARISON_PATH}")
-
-    comparison = pd.read_csv(COMPARISON_PATH)
+    comparison = build_comparison_table()
+    comparison["model"] = pd.Categorical(comparison["model"], categories=MODEL_ORDER, ordered=True)
     comparison = comparison.sort_values(["lead_hours", "model"])
 
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.8), sharex=True)
 
     for idx, metric in enumerate(METRICS):
         pivot = comparison.pivot(index="lead_hours", columns="model", values=metric)
+        pivot = pivot[[m for m in MODEL_ORDER if m in pivot.columns]]
+        pivot = pivot.rename(columns=MODEL_LABELS)
         pivot.plot(kind="bar", ax=axes[idx], width=0.82)
 
         axes[idx].set_title(METRIC_TITLES[metric])
@@ -110,6 +148,7 @@ def main() -> None:
 
     print(f"Saved: {ART_DIR / 'rolling_model_metrics_comparison.png'}")
     print(f"Saved: {ART_DIR / 'vitals_timeseries_6_vitals_4_conditions.png'}")
+    print(f"Saved: {COMPARISON_PATH}")
 
 
 if __name__ == "__main__":

@@ -1,1 +1,6 @@
-/home/ubuntu/condition-aware_risk_CDSS/deployment/compose.build.yml
+services:
+  risk-api:
+    image: ${BACKEND_IMAGE:-local/condition-aware-risk-api:latest}
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile

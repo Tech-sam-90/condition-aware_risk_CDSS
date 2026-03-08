@@ -6,7 +6,7 @@ import pandas as pd
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ROLLING_ARTIFACT_DIR = ROOT / "modeling" / "artifacts" / "rolling_boosted"
+ROLLING_ARTIFACT_DIR = ROOT / "modeling" / "artifacts" / "rolling_lstm_event"
 METRICS_PATH = ROLLING_ARTIFACT_DIR / "metrics_by_lead.csv"
 METADATA_PATH = ROLLING_ARTIFACT_DIR / "metadata.json"
 OUTPUT_DIR = ROOT / "deployment" / "artifacts"
@@ -17,14 +17,12 @@ def main() -> None:
     if not METRICS_PATH.exists():
         raise FileNotFoundError(f"Missing metrics file: {METRICS_PATH}")
 
-    if not METADATA_PATH.exists():
-        raise FileNotFoundError(f"Missing metadata file: {METADATA_PATH}")
-
     metrics = pd.read_csv(METRICS_PATH).sort_values("lead_hours")
-    with open(METADATA_PATH, "r", encoding="utf-8") as f:
-        metadata = json.load(f)
-
-    model_family = metadata.get("model_family", "deployed_model")
+    model_family = "lstm_event_timeseries"
+    if METADATA_PATH.exists():
+        with open(METADATA_PATH, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+        model_family = metadata.get("model_family", model_family)
     leads = metrics["lead_hours"].tolist()
 
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.6))

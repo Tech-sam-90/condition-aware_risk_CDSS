@@ -1,1 +1,4 @@
-/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts/model_metrics.csv
+model,roc_auc,auprc,brier
+hist_gradient_boosting,0.7799081820296498,0.45901101854473475,0.10788874022935184
+calibrated_hist_gradient_boosting,0.7781230242394248,0.45128771762071834,0.10844668794641772
+logistic_regression,0.7137390607814744,0.32696219419357464,0.11976647760900849

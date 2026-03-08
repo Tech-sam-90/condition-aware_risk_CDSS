@@ -1,1 +1,2 @@
-/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts/lstm_model_metrics.csv
+model,roc_auc,auprc,brier,train_minority_rate
+lstm_24h_vitals,0.7735518016703598,0.4606403695523591,0.10857507586479187,0.15509112340194034

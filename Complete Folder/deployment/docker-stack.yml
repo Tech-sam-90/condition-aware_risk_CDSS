@@ -1,1 +1,23 @@
-/home/ubuntu/condition-aware_risk_CDSS/deployment/docker-stack.yml
+version: "3.9"
+
+services:
+  risk-api:
+    image: ${BACKEND_IMAGE:-your-registry/condition-aware-risk-api:latest}
+    ports:
+      - target: 8000
+        published: 8000
+        protocol: tcp
+        mode: ingress
+    environment:
+      - HIGH_RISK_THRESHOLD=${HIGH_RISK_THRESHOLD:-0.02}
+      - SEQUENCE_LENGTH=${SEQUENCE_LENGTH:-24}
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - risk-net
+
+networks:
+  risk-net:
+    driver: overlay

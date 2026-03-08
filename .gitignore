@@ -17,3 +17,9 @@ data/processed/**/*.csv.gz
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# Ignore packaged complete-folder datasets (large files)
+Complete Folder/datasets/
+
+# Ignore local packaged zip snapshot
+Complete_Folder_*.zip
