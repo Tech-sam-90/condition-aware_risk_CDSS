@@ -1,0 +1,9 @@
+# Training-pipeline dependencies (data processing, feature engineering, modeling, evaluation).
+# For the deployment API only, see deployment/backend/requirements.txt instead.
+duckdb>=1.1.0
+pandas==3.0.1
+numpy>=1.26.0,<2.2.0
+scikit-learn==1.8.0
+tensorflow==2.19.0
+imbalanced-learn>=0.13.0
+matplotlib>=3.9
