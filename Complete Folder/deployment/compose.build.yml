@@ -1,6 +1,0 @@
-services:
-  risk-api:
-    image: ${BACKEND_IMAGE:-local/condition-aware-risk-api:latest}
-    build:
-      context: ..
-      dockerfile: deployment/Dockerfile
