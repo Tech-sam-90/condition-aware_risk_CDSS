@@ -15,16 +15,26 @@ Streaming support:
 From repository root:
 
 ```bash
-/home/ubuntu/care_risk_env/bin/python feature_engineering/build_rolling_window_timeseries.py
-/home/ubuntu/care_risk_env/bin/python modeling/train_rolling_lstm_event_models.py
+python feature_engineering/build_rolling_window_timeseries.py
+python modeling/train_all_models.py
 ```
 
-This generates the LSTM sequence files used by backend image under `modeling/artifacts/rolling_lstm_event/`.
+This generates/collects sequence metrics for six models, produces a comparison figure, and stages the selected best model into:
+
+- `deployment/backend/model_artifacts/selected_sequence/`
+- `deployment/backend/model_artifacts/model_selection.json`
+
+If you already trained all models and only want to re-rank/re-stage:
+
+```bash
+python modeling/train_all_models.py --skip-sequence-compare-train
+```
 
 Note:
 
-- Backend image copies only `modeling/artifacts/rolling_lstm_event` into `/app/model_artifacts/rolling_lstm_event`.
-- Rebuild `risk-api` after retraining so deployment uses the newest model files.
+- Backend first loads models from `/app/model_artifacts/selected_sequence`.
+- If no selected model exists, it falls back to `/app/model_artifacts/rolling_lstm_event`.
+- Rebuild `risk-api` after re-running comparison so deployment uses newest selected artifacts.
 
 ## 2) Build local images
 

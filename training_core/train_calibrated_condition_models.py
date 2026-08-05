@@ -21,13 +21,15 @@ except ImportError:
     from modeling.resampling_utils import rebalance_binary_dataframe
 
 
-PROCESSED_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/data/processed")
-MODEL_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+MODEL_DIR = PROJECT_ROOT / "modeling" / "artifacts"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 RESAMPLE_ENABLED = os.getenv("TABULAR_RESAMPLE_ENABLED", "1") == "1"
 TARGET_MINORITY_RATIO = float(os.getenv("TABULAR_TARGET_MINORITY_RATIO", "0.15"))
 OVERSAMPLE_MULTIPLIER = float(os.getenv("TABULAR_OVERSAMPLE_MULTIPLIER", "2.0"))
+TARGET_SENSITIVITY = float(os.getenv("TABULAR_TARGET_SENSITIVITY", "0.85"))
 
 
 def pick_primary_condition(row):
@@ -250,11 +252,11 @@ def main():
         mask = X_test["condition_input"] == cond
         if mask.sum() < 20 or y_test[mask].sum() < 5:
             continue
-        thr = threshold_for_sensitivity(y_test[mask], proba_cal[mask], target_sensitivity=0.85)
+        thr = threshold_for_sensitivity(y_test[mask], proba_cal[mask], target_sensitivity=TARGET_SENSITIVITY)
         threshold_rows.append({"condition_input": cond, "threshold_high_risk": thr})
 
     thresholds = pd.DataFrame(threshold_rows)
-    default_thr = float(threshold_for_sensitivity(y_test, proba_cal, target_sensitivity=0.85))
+    default_thr = float(threshold_for_sensitivity(y_test, proba_cal, target_sensitivity=TARGET_SENSITIVITY))
 
     artifacts = {
         "feature_cols": feature_cols,
@@ -267,6 +269,7 @@ def main():
             "enabled": RESAMPLE_ENABLED,
             "target_minority_ratio": TARGET_MINORITY_RATIO,
             "oversample_multiplier": OVERSAMPLE_MULTIPLIER,
+            "target_sensitivity": TARGET_SENSITIVITY,
             "n_pos_before": int(resample_plan["n_pos_original"]),
             "n_neg_before": int(resample_plan["n_neg_original"]),
             "n_pos_after": int(resample_plan["n_pos_sample"]),

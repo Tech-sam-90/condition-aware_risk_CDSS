@@ -1,0 +1,10 @@
+{
+  "selected_model": "bilstm_attention_smote2575",
+  "source_artifacts_dir": "/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts/advanced_time_series/bilstm_attention_smote2575",
+  "staged_artifacts": [
+    "bilstm_attention_smote2575_lead_1h.keras",
+    "bilstm_attention_smote2575_lead_2h.keras",
+    "bilstm_attention_smote2575_lead_3h.keras"
+  ],
+  "selection_method": "lowest composite rank (AUC/AUPRC/Brier)"
+}

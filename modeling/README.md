@@ -1,84 +1,50 @@
 # Modeling
 
-This folder contains model training code for rule-based, statistical, and planned deep learning approaches.
+The `modeling/` folder now exposes a single executable modeling entry point:
 
-## Scripts
+- `train_all_models.py`
 
-- `train_calibrated_condition_models.py`: trains logistic, boosted, and isotonic-calibrated boosted models.
-- `predict_risk.py`: command-line condition + vitals risk inference using calibrated boosted model.
-- `train_lstm_timeseries.py`: optional deep-learning baseline using first-24h hourly vitals sequences.
-- `train_rolling_boosted_models.py`: trains calibrated boosted lead-time models (`1h/2h/3h`) on rolling-window features.
-- `train_rolling_sequence_models.py`: trains GRU lead-time models (`1h/2h/3h`) on hourly sequences.
+All model artifacts are written under:
 
-## Run
+- `modeling/artifacts/`
 
-```bash
-python modeling/train_calibrated_condition_models.py
+## Train All Models
 
-python modeling/predict_risk.py \
-	--condition sepsis \
-	--heart_rate 110 \
-	--sbp 95 \
-	--map 62 \
-	--resp_rate 24 \
-	--spo2 93 \
-	--temp_f 100.4
-
-# Optional deep-learning baseline (requires tensorflow)
-python modeling/train_lstm_timeseries.py
-
-# Rolling-window baseline
-python modeling/train_rolling_boosted_models.py
-
-# Rolling-window sequence challenger (requires tensorflow)
-python modeling/train_rolling_sequence_models.py
-```
-
-## Class Rebalancing (15% Minority)
-
-All training scripts now support combined majority downsampling and minority oversampling.
+Run the unified training pipeline:
 
 ```bash
-# Tabular logistic/boosted/calibrated model
-TABULAR_RESAMPLE_ENABLED=1 \
-TABULAR_TARGET_MINORITY_RATIO=0.15 \
-TABULAR_OVERSAMPLE_MULTIPLIER=2.0 \
-python modeling/train_calibrated_condition_models.py
-
-# Rolling boosted lead models
-ROLLING_RESAMPLE_ENABLED=1 \
-ROLLING_TARGET_MINORITY_RATIO=0.15 \
-ROLLING_OVERSAMPLE_MULTIPLIER=2.0 \
-python modeling/train_rolling_boosted_models.py
-
-# LSTM baseline
-LSTM_RESAMPLE_ENABLED=1 \
-LSTM_TARGET_MINORITY_RATIO=0.15 \
-LSTM_OVERSAMPLE_MULTIPLIER=2.0 \
-python modeling/train_lstm_timeseries.py
-
-# GRU rolling sequence baseline
-SEQUENCE_RESAMPLE_ENABLED=1 \
-SEQUENCE_TARGET_MINORITY_RATIO=0.15 \
-SEQUENCE_POSITIVE_OVERSAMPLE_MULTIPLIER=2.0 \
-python modeling/train_rolling_sequence_models.py
+python modeling/train_all_models.py
 ```
 
-## Outputs
+Optional flags:
 
-Saved under `modeling/artifacts/`:
+```bash
+# Skip optional 24h LSTM baseline
+python modeling/train_all_models.py --skip-optional-lstm
 
-- `model_metrics.csv`
-- `condition_thresholds.csv`
-- `evaluation_predictions.csv`
-- `*.pkl` model files
-- `metadata.json`
-- `lstm_24h_vitals.keras` (optional)
-- `lstm_model_metrics.csv` (optional)
+# Rebuild sequence comparison from existing metrics only
+python modeling/train_all_models.py --skip-sequence-compare-train
 
-Rolling-window artifacts:
+# Override shared imbalance policy across model families
+python modeling/train_all_models.py --minority-ratio 0.15 --oversample-multiplier 2.0
+```
 
-- `modeling/artifacts/rolling_boosted/metrics_by_lead.csv`
-- `modeling/artifacts/rolling_boosted/calibrated_boosted_lead_{1,2,3}h.pkl`
-- `modeling/artifacts/rolling_sequence/metrics_by_lead.csv`
-- `modeling/artifacts/rolling_sequence/gru_lead_{1,2,3}h.keras`
+## Prediction Mode
+
+Run inference using the calibrated boosted model:
+
+```bash
+python modeling/train_all_models.py --predict --condition sepsis --heart-rate 110 --sbp 95 --map 62 --resp-rate 24 --spo2 93 --temp-f 101.2
+```
+
+Supported conditions:
+
+- `sepsis`
+- `heart_failure`
+- `ckd`
+- `diabetes`
+
+## Notes
+
+- Training implementations are intentionally moved to `training_core/` to keep `modeling/` clean and single-entry.
+- Deployment model selection metadata is written to `deployment/backend/model_artifacts/model_selection.json`.

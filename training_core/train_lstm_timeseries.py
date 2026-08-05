@@ -12,8 +12,9 @@ except ImportError:
     from modeling.resampling_utils import rebalance_binary_arrays
 
 
-PROCESSED_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/data/processed")
-OUTPUT_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+OUTPUT_DIR = PROJECT_ROOT / "modeling" / "artifacts"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 VITALS = ["heart_rate", "sbp", "map", "resp_rate", "spo2", "temp_f"]

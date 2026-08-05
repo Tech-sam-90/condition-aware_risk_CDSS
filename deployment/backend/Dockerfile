@@ -9,6 +9,7 @@ COPY deployment/backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY deployment/backend/app /app/app
+COPY deployment/backend/model_artifacts /app/model_artifacts
 COPY modeling/artifacts/rolling_lstm_event /app/model_artifacts/rolling_lstm_event
 
 EXPOSE 8000

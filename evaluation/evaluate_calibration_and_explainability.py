@@ -7,8 +7,9 @@ from sklearn.calibration import calibration_curve
 from sklearn.inspection import permutation_importance
 
 
-MODEL_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts")
-EVAL_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/evaluation/artifacts")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MODEL_DIR = PROJECT_ROOT / "modeling" / "artifacts"
+EVAL_DIR = PROJECT_ROOT / "evaluation" / "artifacts"
 EVAL_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -29,7 +30,7 @@ def main():
     pred_path = MODEL_DIR / "evaluation_predictions.csv"
     if not pred_path.exists():
         raise FileNotFoundError(
-            f"{pred_path} not found. Run modeling/train_calibrated_condition_models.py first."
+            f"{pred_path} not found. Run modeling/train_all_models.py first."
         )
 
     preds = pd.read_csv(pred_path)

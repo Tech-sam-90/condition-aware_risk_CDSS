@@ -17,8 +17,9 @@ except ImportError:
     from modeling.resampling_utils import rebalance_binary_dataframe
 
 
-PROCESSED_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/data/processed")
-ART_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts/rolling_boosted")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+ART_DIR = PROJECT_ROOT / "modeling" / "artifacts" / "rolling_boosted"
 ART_DIR.mkdir(parents=True, exist_ok=True)
 
 RESAMPLE_ENABLED = os.getenv("ROLLING_RESAMPLE_ENABLED", "1") == "1"

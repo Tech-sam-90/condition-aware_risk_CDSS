@@ -8,7 +8,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 
 
-ROOT = Path("/home/ubuntu/condition-aware_risk_CDSS")
+ROOT = Path(__file__).resolve().parents[1]
 MODEL_ART = ROOT / "modeling" / "artifacts"
 EVAL_ART = ROOT / "evaluation" / "artifacts"
 EVAL_ART.mkdir(parents=True, exist_ok=True)

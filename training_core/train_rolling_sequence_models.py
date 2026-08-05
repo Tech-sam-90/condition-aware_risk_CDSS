@@ -7,29 +7,29 @@ from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_s
 from sklearn.model_selection import train_test_split
 
 
-PROCESSED_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/data/processed")
-ART_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/modeling/artifacts/rolling_lstm_event")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+ART_DIR = PROJECT_ROOT / "modeling" / "artifacts" / "rolling_sequence"
 ART_DIR.mkdir(parents=True, exist_ok=True)
 
 VITAL_COLS = ["heart_rate", "sbp", "map", "resp_rate", "spo2", "temp_f"]
 CONDITIONS = ["sepsis", "heart_failure", "ckd", "diabetes", "other"]
-
-SEQ_LEN = int(os.getenv("LSTM_EVENT_SEQ_LEN", "24"))
-DEFAULT_NEGATIVE_KEEP_PROB = float(os.getenv("LSTM_EVENT_NEGATIVE_KEEP_PROB", "0.2"))
-RESAMPLE_ENABLED = os.getenv("LSTM_EVENT_RESAMPLE_ENABLED", "1") == "1"
-TARGET_MINORITY_RATIO = float(os.getenv("LSTM_EVENT_TARGET_MINORITY_RATIO", "0.15"))
-POSITIVE_OVERSAMPLE_MULTIPLIER = float(os.getenv("LSTM_EVENT_POSITIVE_OVERSAMPLE_MULTIPLIER", "2.0"))
-EPOCHS = int(os.getenv("LSTM_EVENT_EPOCHS", "8"))
-BATCH_SIZE = int(os.getenv("LSTM_EVENT_BATCH_SIZE", "256"))
-UNITS_1 = int(os.getenv("LSTM_EVENT_UNITS_1", "64"))
-UNITS_2 = int(os.getenv("LSTM_EVENT_UNITS_2", "32"))
+SEQ_LEN = 24
+DEFAULT_NEGATIVE_KEEP_PROB = float(os.getenv("SEQUENCE_NEGATIVE_KEEP_PROB", "0.2"))
+RESAMPLE_ENABLED = os.getenv("SEQUENCE_RESAMPLE_ENABLED", "1") == "1"
+TARGET_MINORITY_RATIO = float(os.getenv("SEQUENCE_TARGET_MINORITY_RATIO", "0.15"))
+POSITIVE_OVERSAMPLE_MULTIPLIER = float(os.getenv("SEQUENCE_POSITIVE_OVERSAMPLE_MULTIPLIER", "2.0"))
+EPOCHS = int(os.getenv("SEQUENCE_EPOCHS", "8"))
+BATCH_SIZE = int(os.getenv("SEQUENCE_BATCH_SIZE", "256"))
 
 
 def load_tf():
     try:
         import tensorflow as tf
     except ImportError as exc:
-        raise ImportError("TensorFlow is required. Install with: pip install tensorflow") from exc
+        raise ImportError(
+            "TensorFlow is required. Install with: pip install tensorflow"
+        ) from exc
     return tf
 
 
@@ -177,13 +177,13 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
     target_col = f"target_event_in_{lead_hours}h"
     stay_level = df.groupby("stay_id", as_index=False)[target_col].max().rename(columns={target_col: "y"})
     stay_level["y"] = stay_level["y"].fillna(0).astype(int)
-
     train_stays, test_stays = train_test_split(
         stay_level,
         test_size=0.2,
         random_state=42,
         stratify=stay_level["y"],
     )
+
     train_ids_all = train_stays["stay_id"].astype(int).tolist()
     test_ids = test_stays["stay_id"].astype(int).tolist()
 
@@ -203,12 +203,11 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
         train_pos_windows, train_neg_windows
     )
     print(
-        f"lead={lead_hours}h LSTM sampling: "
+        f"lead={lead_hours}h sequence sampling: "
         f"before pos={train_pos_windows} neg={train_neg_windows} | "
         f"positive_repeat={positive_repeat} neg_keep_prob={neg_keep_prob:.4f} | "
         f"minority_rate={achieved_ratio:.4f} | enabled={RESAMPLE_ENABLED}"
     )
-
     train_count = count_sequences(
         df,
         train_ids,
@@ -235,7 +234,14 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
     )
     train_ds = train_ds.shuffle(4096).repeat().batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
-    val_count = count_sequences(df, val_ids, target_col, SEQ_LEN, 1.0, positive_repeat=1)
+    val_count = count_sequences(
+        df,
+        val_ids,
+        target_col,
+        SEQ_LEN,
+        1.0,
+        positive_repeat=1,
+    )
     val_ds = tf.data.Dataset.from_generator(
         lambda: iter_sequences(
             df,
@@ -257,13 +263,14 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
         [
             tf.keras.layers.Input(shape=(SEQ_LEN, input_dim)),
             tf.keras.layers.Masking(mask_value=0.0),
-            tf.keras.layers.LSTM(UNITS_1, return_sequences=True),
+            tf.keras.layers.GRU(48, return_sequences=True),
             tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.LSTM(UNITS_2),
+            tf.keras.layers.GRU(24),
             tf.keras.layers.Dropout(0.2),
             tf.keras.layers.Dense(1, activation="sigmoid"),
         ]
     )
+
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
         loss="binary_crossentropy",
@@ -309,11 +316,11 @@ def train_for_lead(tf, df: pd.DataFrame, lead_hours: int):
         {
             "stay_id": test_sequence_stays,
             f"target_event_in_{lead_hours}h": y_test,
-            "p_lstm_event": p,
+            "p_gru": p,
         }
     )
 
-    model.save(ART_DIR / f"lstm_event_lead_{lead_hours}h.keras")
+    model.save(ART_DIR / f"gru_lead_{lead_hours}h.keras")
     pred_df.to_csv(ART_DIR / f"predictions_lead_{lead_hours}h.csv", index=False)
 
     return metrics
@@ -330,21 +337,16 @@ def main():
     df = df[(df["hour_from_icu"] >= 4) & (df["hour_from_icu"] <= 44)].copy()
     df["stay_id"] = pd.to_numeric(df["stay_id"], errors="coerce").astype("Int64")
     df["hour_from_icu"] = pd.to_numeric(df["hour_from_icu"], errors="coerce")
-
     for col in VITAL_COLS:
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("float32")
         df[col] = df.groupby("stay_id")[col].ffill().bfill()
         df[col] = df[col].fillna(float(df[col].median()))
-
     for lead in [1, 2, 3]:
         tcol = f"target_event_in_{lead}h"
         df[tcol] = pd.to_numeric(df[tcol], errors="coerce").fillna(0).astype("int8")
-
     df = df.dropna(subset=["stay_id", "hour_from_icu", "condition_input"])
 
     tf = load_tf()
-    np.random.seed(42)
-    tf.random.set_seed(42)
 
     all_metrics = []
     for lead in [1, 2, 3]:
@@ -355,7 +357,7 @@ def main():
     metrics_df.to_csv(ART_DIR / "metrics_by_lead.csv", index=False)
 
     print(metrics_df)
-    print(f"Saved rolling LSTM-event artifacts to: {ART_DIR}")
+    print(f"Saved rolling sequence artifacts to: {ART_DIR}")
 
 
 if __name__ == "__main__":

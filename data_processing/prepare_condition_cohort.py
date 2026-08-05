@@ -3,8 +3,9 @@ from pathlib import Path
 import duckdb
 
 
-RAW_DIR = "/home/ubuntu/condition-aware_risk_CDSS/data/raw"
-PROCESSED_DIR = Path("/home/ubuntu/condition-aware_risk_CDSS/data/processed")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAW_DIR = (PROJECT_ROOT / "data" / "raw").as_posix()
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
 

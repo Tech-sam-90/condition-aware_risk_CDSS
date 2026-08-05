@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", "/app/model_artifacts"))
 SEQ_LEN = int(os.getenv("SEQUENCE_LENGTH", "24"))
+SELECTED_SUBDIR = os.getenv("SELECTED_MODEL_SUBDIR", "selected_sequence")
 CONDITIONS = ["sepsis", "heart_failure", "ckd", "diabetes", "other"]
 VITAL_COLS = ["heart_rate", "sbp", "map", "resp_rate", "spo2", "temp_f"]
 
@@ -49,22 +50,42 @@ def load_artifacts():
     except ImportError as exc:
         raise ImportError("TensorFlow is required to serve LSTM artifacts.") from exc
 
-    rolling_dir = MODEL_DIR / "rolling_lstm_event"
+    preferred_dir = MODEL_DIR / SELECTED_SUBDIR
+    fallback_dir = MODEL_DIR / "rolling_lstm_event"
+
+    if preferred_dir.exists():
+        rolling_dir = preferred_dir
+    elif fallback_dir.exists():
+        rolling_dir = fallback_dir
+    else:
+        raise FileNotFoundError(
+            f"No model directory found under {MODEL_DIR}. "
+            f"Expected '{SELECTED_SUBDIR}' or 'rolling_lstm_event'."
+        )
 
     models = {}
     missing = []
+    prefixes = []
     for lead in [1, 2, 3]:
-        path = rolling_dir / f"lstm_event_lead_{lead}h.keras"
-        if not path.exists():
-            missing.append(str(path))
+        matches = sorted(rolling_dir.glob(f"*_lead_{lead}h.keras"))
+        if len(matches) == 0:
+            missing.append(str(rolling_dir / f"*_lead_{lead}h.keras"))
             continue
+        if len(matches) > 1:
+            raise RuntimeError(
+                f"Multiple model files found for lead={lead}h in {rolling_dir}: {matches}"
+            )
+
+        path = matches[0]
+        prefixes.append(path.name.replace(f"_lead_{lead}h.keras", ""))
         models[lead] = tf.keras.models.load_model(path, compile=False)
 
     if missing:
         raise FileNotFoundError(f"Missing model artifacts: {', '.join(missing)}")
 
+    model_family = prefixes[0] if prefixes else "unknown"
     metadata = {
-        "model_family": "lstm_event_timeseries",
+        "model_family": model_family,
         "sequence_length": SEQ_LEN,
         "vitals": VITAL_COLS,
         "conditions": CONDITIONS,

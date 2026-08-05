@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-ROOT = Path("/home/ubuntu/condition-aware_risk_CDSS")
+ROOT = Path(__file__).resolve().parents[1]
 MODEL_ART_DIR = ROOT / "modeling" / "artifacts"
 OUT_DIR = ROOT / "evaluation" / "artifacts"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
